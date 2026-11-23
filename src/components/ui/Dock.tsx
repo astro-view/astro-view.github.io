@@ -13,9 +13,15 @@ import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
 import { ChevronDown } from 'lucide-react';
 
-/** Shared glass treatment, so every floating surface reads as one system. */
+/**
+ * Shared glass treatment, so every floating surface reads as one system.
+ *
+ * Deliberately see-through: the sky is the point, and a panel that hides it is
+ * a panel in the way. A heavy blur keeps text legible over a moving star field
+ * without needing an opaque fill.
+ */
 export const GLASS =
-  'border border-edge/90 bg-panel/85 backdrop-blur-md shadow-[0_8px_30px_rgba(0,0,0,0.55)]';
+  'border border-white/[0.07] bg-[#080b14]/45 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.45)]';
 
 export function DockPanel({
   title,
@@ -49,7 +55,7 @@ export function DockPanel({
           type="button"
           onClick={onToggle}
           aria-expanded={open}
-          className="group flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-panel2/70"
+          className="group flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-white/[0.04]"
         >
           {icon && <span className="shrink-0 text-accent">{icon}</span>}
           <span className="panel-title truncate group-hover:text-muted">{title}</span>
@@ -64,7 +70,7 @@ export function DockPanel({
         {actions && <div className="flex shrink-0 items-center gap-1 pr-2">{actions}</div>}
       </header>
       {open && (
-        <div className={clsx('min-h-0 flex-1 animate-fadeIn border-t border-edge/70', bodyClassName)}>
+        <div className={clsx('min-h-0 flex-1 animate-fadeIn border-t border-white/[0.06]', bodyClassName)}>
           {children}
         </div>
       )}

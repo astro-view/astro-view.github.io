@@ -1,8 +1,20 @@
-/** Data provenance and licensing, shown in-app rather than buried in a README. */
+/**
+ * Data provenance and licensing.
+ *
+ * Kept short, but not optional: the HYG catalogue is CC BY-SA and NASA imagery
+ * requires credit, so the attributions here are a licence obligation rather
+ * than a nicety.
+ */
 import { useEffect, useState } from 'react';
 import { BookOpen, ExternalLink, X } from 'lucide-react';
 import { Button } from './ui/primitives';
-import { loadMilkyWayMeta, loadStarCatalog, type MilkyWayMeta, type StarCatalogMeta } from '../data/catalog';
+import { GLASS } from './ui/Dock';
+import {
+  loadMilkyWayMeta,
+  loadStarCatalog,
+  type MilkyWayMeta,
+  type StarCatalogMeta,
+} from '../data/catalog';
 
 export function AttributionButton() {
   const [open, setOpen] = useState(false);
@@ -11,33 +23,32 @@ export function AttributionButton() {
 
   useEffect(() => {
     if (!open) return;
-    loadStarCatalog().then((c) => setStars(c.meta)).catch(() => undefined);
+    loadStarCatalog()
+      .then((c) => setStars(c.meta))
+      .catch(() => undefined);
     loadMilkyWayMeta().then(setMilkyway).catch(() => undefined);
   }, [open]);
 
   return (
     <>
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} title="Data sources and licences">
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} title="Data sources">
         <BookOpen size={12} className="mr-1 inline" />
         Sources
       </Button>
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-void/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-void/70 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Data sources"
           onClick={(e) => e.target === e.currentTarget && setOpen(false)}
         >
-          <div className="max-h-[80vh] w-full max-w-2xl animate-slideUp overflow-y-auto rounded-lg border border-edge bg-panel p-5">
+          <div
+            className={`max-h-[80vh] w-full max-w-xl animate-slideUp overflow-y-auto rounded-xl p-5 ${GLASS}`}
+          >
             <div className="mb-4 flex items-start justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-ink">Data sources, methods and licences</h2>
-                <p className="mt-1 text-2xs text-dim">
-                  Every number on screen comes from one of these. Nothing is synthesised.
-                </p>
-              </div>
+              <h2 className="text-sm font-semibold text-ink">Data sources</h2>
               <button
                 type="button"
                 aria-label="Close"
@@ -48,105 +59,53 @@ export function AttributionButton() {
               </button>
             </div>
 
-            <div className="space-y-4 text-2xs leading-relaxed text-muted">
-              <Section title="Star catalogue">
+            <dl className="space-y-3 text-2xs leading-relaxed text-muted">
+              <Row term="Stars">
                 {stars ? (
                   <>
-                    <p>
-                      {stars.source} &mdash; {stars.count.toLocaleString()} stars to magnitude{' '}
-                      {stars.magnitudeLimit}, epoch {stars.epoch}.
-                    </p>
-                    <p>{stars.attribution}</p>
-                    <p>
-                      Licence: {stars.license}.{' '}
-                      <Link href={stars.sourceUrl}>{stars.sourceUrl}</Link>
-                    </p>
+                    {stars.source}, {stars.count.toLocaleString()} to mag {stars.magnitudeLimit},{' '}
+                    {stars.epoch}. {stars.license}.{' '}
+                    <Link href={stars.sourceUrl}>astronexus/HYG-Database</Link>
                   </>
                 ) : (
-                  <p>Loading&hellip;</p>
+                  'Loading'
                 )}
-              </Section>
+              </Row>
 
-              <Section title="All-sky Milky Way texture">
+              <Row term="Milky Way">
                 {milkyway ? (
                   <>
-                    <p>{milkyway.source}</p>
-                    <p>{milkyway.content}</p>
-                    <p>
-                      Projection: {milkyway.projection}, {milkyway.frame}. Mapping:{' '}
-                      <code className="font-mono text-dim">{milkyway.mapping}</code>.{' '}
-                      {milkyway.mappingNote}
-                    </p>
-                    <p className="text-dim">{milkyway.limitations}</p>
-                    <p>
-                      {milkyway.rights} <Link href={milkyway.sourceUrl}>{milkyway.sourceUrl}</Link>
-                    </p>
+                    NASA/GSFC Scientific Visualization Studio, Deep Star Maps.{' '}
+                    {milkyway.projection}, {milkyway.frame}. Registration measured, not assumed.{' '}
+                    <Link href={milkyway.sourceUrl}>svs.gsfc.nasa.gov/3895</Link>
                   </>
                 ) : (
-                  <p>Loading&hellip;</p>
+                  'Loading'
                 )}
-              </Section>
+              </Row>
 
-              <Section title="Astronomical computation">
-                <p>
-                  Astronomy Engine (Don Cross), MIT licence &mdash; Sun and Moon ephemerides, nutation
-                  and precession, sidereal time, rise/set and altitude searches, and the
-                  equatorial-to-horizontal rotation used to orient the whole sky.{' '}
-                  <Link href="https://github.com/cosinekitty/astronomy">
-                    github.com/cosinekitty/astronomy
-                  </Link>
-                </p>
-                <p>
-                  Galactic Centre position: Sgr A* at RA 266.41683&deg;, Dec &minus;29.00781&deg;
-                  (ICRS). Galactic coordinates use the IAU 1958 pole with J2000 values.
-                </p>
-              </Section>
+              <Row term="Ephemerides">
+                Astronomy Engine (Don Cross), MIT.{' '}
+                <Link href="https://github.com/cosinekitty/astronomy">cosinekitty/astronomy</Link>
+                <br />
+                Galactic Centre: Sgr A*, RA 266.41683&deg;, Dec &minus;29.00781&deg; (ICRS).
+              </Row>
 
-              <Section title="Sky brightness and moonlight">
-                <p>
-                  Moonlight: Krisciunas, K. &amp; Schaefer, B. E. 1991, PASP 103, 1033, &ldquo;A model
-                  of the brightness of moonlight&rdquo;.
-                </p>
-                <p>
-                  Limiting magnitude from sky brightness: Schaefer&apos;s visual-detection relation,
-                  in the form used alongside Unihedron SQM readings and the Bortle scale.
-                </p>
-                <p>
-                  Airmass: Pickering (2002). Extinction coefficient k = 0.172 mag/airmass, a typical
-                  clear-site V-band value.
-                </p>
-                <p className="text-dim">
-                  The renderer&apos;s response to sky brightness is a presentation choice, documented
-                  in <code className="font-mono">src/light-pollution/model.ts</code>, not a
-                  photometric simulation of any particular camera.
-                </p>
-              </Section>
+              <Row term="Moonlight">
+                Krisciunas &amp; Schaefer 1991, PASP 103, 1033. Limiting magnitude: Schaefer&apos;s
+                visual-detection relation. Airmass: Pickering 2002.
+              </Row>
 
-              <Section title="Map and place search">
-                <p>
-                  Basemap tiles from OpenStreetMap, &copy; OpenStreetMap contributors, darkened
-                  client-side. No map API key is used. Place search
-                  uses OpenStreetMap Nominatim, queried only when you press Search.
-                </p>
-                <p>
-                  Time zones from <code className="font-mono">tz-lookup</code>; local time conversion
-                  including daylight saving uses the browser&apos;s own IANA database via{' '}
-                  <code className="font-mono">Intl</code>.
-                </p>
-              </Section>
+              <Row term="Map">
+                Tiles &copy; OpenStreetMap contributors, darkened client-side. Search via Nominatim.
+                No map API key.
+              </Row>
 
-              <Section title="Deliberate omissions">
-                <p>
-                  No weather, cloud or precipitation data is used anywhere: it is out of scope by
-                  design.
-                </p>
-                <p>
-                  No light-pollution raster is bundled. The published global atlases are either not
-                  redistributable or need an API key, and a static site cannot keep a key secret, so
-                  the overlay is opt-in with a key you supply and store yourself.
-                </p>
-              </Section>
-            </div>
+              <Row term="Not modelled">
+                Weather and artificial light pollution. The sky is treated as naturally dark; only
+                the Moon brightens it.
+              </Row>
+            </dl>
           </div>
         </div>
       )}
@@ -154,12 +113,12 @@ export function AttributionButton() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Row({ term, children }: { term: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h3 className="mb-1 text-xs font-semibold text-ink">{title}</h3>
-      <div className="space-y-1">{children}</div>
-    </section>
+    <div className="grid grid-cols-[6.5rem_1fr] gap-3">
+      <dt className="text-2xs uppercase tracking-wider text-dim">{term}</dt>
+      <dd>{children}</dd>
+    </div>
   );
 }
 

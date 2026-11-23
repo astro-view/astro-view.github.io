@@ -37,7 +37,6 @@ a panel that folds away, and `H` clears all of them at once.
 - Place-name search, or type coordinates and elevation directly
 - Camera direction indicator on the map: a wedge showing the azimuth and the lens's angular width
 - Time zone resolved from the coordinates, with daylight saving handled correctly
-- Optional light-pollution tile overlay using *your own* API key (never bundled)
 
 **Camera**
 - Full frame, APS-C (Sony/Nikon/Fuji and Canon), Micro Four Thirds, 44×33 medium format, 1 inch,
@@ -57,11 +56,10 @@ a panel that folds away, and `H` clears all of them at once.
 - Sunset/sunrise, astronomical dusk/dawn, moonrise/moonset, core rise/set
 - Milky Way band visibility reported *separately* from Galactic Centre altitude
 
-**Light pollution**
-- Manual SQM control (16–22 mag/arcsec²) with Bortle classification and site presets
-- Ideal dark sky vs. estimated sky comparison
-- Moonlight contribution computed with the Krisciunas & Schaefer (1991) model
-- Limiting magnitude, moon penalty in magnitudes, effective SQM at the frame centre
+**Moonlight**
+- Moonlight contribution from the Krisciunas & Schaefer (1991) model, evaluated at the frame centre
+- Moon penalty in magnitudes, effective sky brightness, limiting magnitude
+- Toggle moonlight off to compare the same sky without it
 
 **Not included, by design:** weather, cloud cover and precipitation forecasting are explicitly out
 of scope.
@@ -81,7 +79,7 @@ Lucide icons · Vitest · GitHub Pages
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # type-check, then build to dist/
-npm run test     # 141 unit tests
+npm run test     # 140 unit tests
 ```
 
 Other scripts:
@@ -106,7 +104,7 @@ src/
   camera/           sensor formats, field of view, rectilinear projection
   rendering/        Three.js sky renderer, texture UV mapping
   location/         map panel, place search
-  light-pollution/  sky brightness, moonlight, Bortle, render parameters
+  sky-brightness/   natural sky, moonlight, render parameters
   components/       UI panels and primitives
   hooks/            central application state
   data/             static dataset loaders
@@ -244,21 +242,17 @@ own atmosphere model for rise and set times.
 
 ### What is *not* a physical simulation
 
-**Sky brightness is an input, not a prediction.** AstroView does not claim to know how bright your
-sky is. You supply an SQM reading, pick a preset, or read a value off a published atlas; it then
-shows you consistently what that implies.
+**Sky brightness is natural sky plus Moon.** The sky is treated as a pristine natural one
+(22.0 mag/arcsec²) and the only thing that brightens it is the Moon. Artificial light pollution is
+not modelled at all, so every number on screen is something the app can derive rather than
+something you would have to supply.
 
-**The rendering response is a presentation choice**, documented in `src/light-pollution/model.ts`:
-background level rises with luminance normalised to a Bortle 8 sky, Milky Way contrast falls with
-the ratio of natural to actual background, and the star cut-off is the computed naked-eye limiting
-magnitude plus one magnitude (a camera on a tripod reaches deeper than the eye). It reproduces the
-loss of faint stars, the collapse of Milky Way contrast and the glow — not the photometric response
-of a particular camera and raw converter.
+**The rendering response is a presentation choice**, documented in `src/sky-brightness/model.ts`:
+background rises with luminance relative to the natural sky, Milky Way contrast falls with the same
+ratio, and the star cut-off is the computed naked-eye limiting magnitude plus one (a camera on a
+tripod reaches deeper than the eye). It reproduces the loss of faint stars under moonlight, not the
+photometric response of a particular camera and raw converter.
 
-**VIIRS upward radiance is not treated as sky brightness.** Upward radiance measures light leaving
-the ground towards the satellite; zenith sky brightness is scattered light coming back down. The two
-are related only through an atmospheric scattering model (Falchi et al. 2016). Where a radiance
-figure appears it is labelled as radiance, and any derived brightness is marked indicative.
 
 **Milky Way visibility ≠ Galactic Centre visibility.** The core can be below the horizon while much
 of the band is well placed. Both are reported, separately.
@@ -289,23 +283,12 @@ of the band is well placed. Both are reported, separately.
   though airmass is computed and used by the moonlight model.
 - **No terrain horizon.** The horizon is the geometric one at the observer's elevation; hills,
   buildings and trees are not modelled.
-- **Light pollution overlay needs your own key.** No raster is bundled — see below.
+- **No artificial light pollution.** The sky is always treated as naturally dark; only the Moon
+  brightens it. A real site near a city will be brighter than shown.
 - **Planner granularity.** The sweep samples every 5 minutes; window boundaries are accurate to
   about that.
 - **Elevation is not looked up.** Enter it manually; it is used for the observer's position, not for
   a terrain horizon.
-
----
-
-## Light pollution overlay
-
-No light-pollution raster is bundled. The well-known global atlases are either not redistributable
-or require an API key, and **a static site cannot keep an API key secret** — anything shipped in the
-bundle is readable by every visitor.
-
-So the overlay is opt-in and uses a key *you* supply. It is stored only in your own browser's
-`localStorage` and is sent only to lightpollutionmap.info when it requests tiles. Without a key, the
-manual SQM control is the supported path and works entirely offline.
 
 ---
 

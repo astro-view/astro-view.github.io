@@ -131,7 +131,7 @@ export function Timeline({ state }: { state: AstroViewState }) {
           </div>
         </div>
 
-        <div className="relative rounded border border-edge bg-abyss">
+        <div className="relative rounded border border-white/[0.07] bg-black/25">
           <svg
             ref={svgRef}
             viewBox={`0 0 100 ${HEIGHT}`}
@@ -272,11 +272,10 @@ export function Timeline({ state }: { state: AstroViewState }) {
         </div>
 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-dim">
-          <LegendSwatch color="#4da3ff" label="Galactic Centre altitude" />
+          <LegendSwatch color="#4da3ff" label="Core" />
           <LegendSwatch color="rgba(255,182,72,0.6)" label="Sun" />
           <LegendSwatch color="rgba(230,236,247,0.5)" label="Moon" dashed />
-          <LegendSwatch color="rgba(74,222,128,0.5)" label="Suitable window" block />
-          <span>darker band = deeper twilight</span>
+          <LegendSwatch color="rgba(74,222,128,0.5)" label="Window" block />
         </div>
       </div>
 
@@ -330,7 +329,7 @@ export function Timeline({ state }: { state: AstroViewState }) {
                   type="button"
                   onClick={() => state.setDate(w.peakAt)}
                   className={clsx(
-                    'flex w-full items-center justify-between gap-2 rounded border border-edge bg-panel2/60 px-2 py-1.5 text-left transition-colors hover:border-good/50 hover:bg-good/5',
+                    'flex w-full items-center justify-between gap-2 rounded border border-white/[0.08] bg-white/[0.03] px-2 py-1.5 text-left transition-colors hover:border-good/50 hover:bg-good/5',
                   )}
                 >
                   <span className="numeric text-xs text-ink">
@@ -345,17 +344,12 @@ export function Timeline({ state }: { state: AstroViewState }) {
             ))}
           </ul>
         ) : (
-          <p className="rounded border border-edge/60 bg-panel2/40 px-2 py-2 text-2xs leading-relaxed text-dim">
+          <p className="rounded border border-white/[0.07] bg-white/[0.03] px-2 py-2 text-2xs leading-relaxed text-dim">
             <Sparkles size={10} className="mr-1 inline text-warn" />
             {planner.diagnosis}
           </p>
         )}
 
-        <p className="mt-2 text-2xs leading-relaxed text-dim">
-          Windows require the Sun below {criteria.maxSunAltitude}&deg;, the core above{' '}
-          {criteria.minGalacticCentreAltitude}&deg; and moonlight under{' '}
-          {criteria.maxMoonPenaltyMag.toFixed(2)} mag. No weather data is involved.
-        </p>
       </div>
     </div>
   );

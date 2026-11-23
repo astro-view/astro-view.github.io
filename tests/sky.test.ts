@@ -182,7 +182,6 @@ describe('observation planner', () => {
     maxSunAltitude: -18,
     minGalacticCentreAltitude: 10,
     maxMoonPenaltyMag: 0.5,
-    baseSqm: 21.6,
   };
 
   it('finds a usable window at Tenerife on a new-moon July night', () => {

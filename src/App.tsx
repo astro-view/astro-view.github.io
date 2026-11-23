@@ -26,6 +26,7 @@ import {
   Map as MapIcon,
   Maximize2,
   Minimize2,
+  Moon,
   Sliders,
   Telescope,
 } from 'lucide-react';
@@ -196,10 +197,21 @@ export default function App() {
             </>
           )}
         </HudChip>
-        <HudChip tone={brightness.bortle.bortle <= 3 ? 'good' : brightness.bortle.bortle <= 5 ? 'warn' : 'bad'}>
-          <HudValue label="SQM">{brightness.effectiveSqm.toFixed(2)}</HudValue>
+        <HudChip
+          tone={
+            brightness.moonPenaltyMag > 1 ? 'bad' : brightness.moonPenaltyMag > 0.3 ? 'warn' : 'good'
+          }
+        >
+          <Moon size={10} />
+          {(skyState.moon.illumination * 100).toFixed(0)}%
           <HudSep />
-          Bortle {brightness.bortle.bortle}
+          <HudValue label="alt">{skyState.moon.altitude.toFixed(0)}&deg;</HudValue>
+          {brightness.moonPenaltyMag > 0.01 && (
+            <>
+              <HudSep />
+              &minus;{brightness.moonPenaltyMag.toFixed(2)} mag
+            </>
+          )}
         </HudChip>
       </div>
 
@@ -281,7 +293,7 @@ export default function App() {
         )}
         <nav
           className={clsx(
-            'pointer-events-auto flex border-t border-edge bg-panel/95 backdrop-blur-md',
+            'pointer-events-auto flex border-t border-white/[0.07] bg-[#080b14]/75 backdrop-blur-xl',
             !sheet && 'rounded-t-xl border-x',
           )}
         >

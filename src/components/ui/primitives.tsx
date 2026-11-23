@@ -4,42 +4,6 @@ import { clsx } from 'clsx';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
-export function Panel({
-  title,
-  icon,
-  actions,
-  children,
-  className,
-  bodyClassName,
-}: {
-  title?: string;
-  icon?: ReactNode;
-  actions?: ReactNode;
-  children: ReactNode;
-  className?: string;
-  bodyClassName?: string;
-}) {
-  return (
-    <section
-      className={clsx(
-        'flex min-h-0 flex-col rounded-lg border border-edge bg-panel/80 backdrop-blur-sm',
-        className,
-      )}
-    >
-      {title && (
-        <header className="flex items-center justify-between gap-2 border-b border-edge px-3 py-2">
-          <div className="flex items-center gap-2">
-            {icon && <span className="text-accent">{icon}</span>}
-            <h2 className="panel-title">{title}</h2>
-          </div>
-          {actions}
-        </header>
-      )}
-      <div className={clsx('min-h-0 flex-1', bodyClassName ?? 'p-3')}>{children}</div>
-    </section>
-  );
-}
-
 export function CollapsibleSection({
   title,
   icon,
@@ -53,11 +17,11 @@ export function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-b border-edge last:border-b-0">
+    <div className="border-b border-white/[0.06] last:border-b-0">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-panel2/60"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.04]"
         aria-expanded={open}
       >
         <span className="flex items-center gap-2">
@@ -161,8 +125,8 @@ export function Button({
           : active
             ? 'border-accent/70 bg-accent/15 text-accent2'
             : variant === 'ghost'
-              ? 'border-transparent text-muted hover:bg-panel2 hover:text-ink'
-              : 'border-edge bg-panel2 text-muted hover:border-edge2 hover:text-ink',
+              ? 'border-transparent text-muted hover:bg-white/[0.06] hover:text-ink'
+              : 'border-white/[0.09] bg-white/[0.04] text-muted hover:border-accent/40 hover:text-ink',
         className,
       )}
     >
@@ -199,7 +163,7 @@ export function Toggle({
       <span
         className={clsx(
           'relative h-[17px] w-[30px] shrink-0 rounded-full border transition-colors duration-200',
-          checked ? 'border-accent bg-accent/30' : 'border-edge2 bg-panel2',
+          checked ? 'border-accent bg-accent/30' : 'border-white/[0.12] bg-white/[0.04]',
         )}
       >
         <span
@@ -227,7 +191,7 @@ export function Stat({
   title?: string;
 }) {
   return (
-    <div title={title} className="rounded border border-edge/70 bg-panel2/50 px-2 py-1.5">
+    <div title={title} className="rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
       <div className="text-2xs uppercase tracking-wider text-dim">{label}</div>
       <div
         className={clsx(
@@ -260,7 +224,7 @@ export function Pill({
         tone === 'good' && 'border-good/40 bg-good/10 text-good',
         tone === 'warn' && 'border-warn/40 bg-warn/10 text-warn',
         tone === 'bad' && 'border-bad/40 bg-bad/10 text-bad',
-        tone === 'default' && 'border-edge2 bg-panel2 text-muted',
+        tone === 'default' && 'border-white/[0.1] bg-white/[0.04] text-muted',
       )}
     >
       {children}
@@ -268,10 +232,3 @@ export function Pill({
   );
 }
 
-export function Note({ children }: { children: ReactNode }) {
-  return (
-    <p className="rounded border border-edge/60 bg-panel2/40 px-2 py-1.5 text-2xs leading-relaxed text-dim">
-      {children}
-    </p>
-  );
-}

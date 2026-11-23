@@ -48,13 +48,8 @@ import {
   computeFieldOfView,
   wrapAzimuth,
 } from '../camera/projection';
-import {
-  computeSkyBrightness,
-  skyRenderParameters,
-} from '../light-pollution/model';
+import { computeSkyBrightness, skyRenderParameters } from '../sky-brightness/model';
 import { angularSeparationDeg, clamp } from '../astronomy/constants';
-
-export type SkyMode = 'ideal' | 'estimated';
 
 export interface Overlays {
   milkyWay: boolean;
@@ -108,8 +103,8 @@ export function useAstroView() {
     roll: 0,
   });
 
-  const [sqm, setSqm] = useState(21.6);
-  const [skyMode, setSkyMode] = useState<SkyMode>('estimated');
+  /** Off shows the same sky with the Moon removed, for an A/B comparison. */
+  const [includeMoon, setIncludeMoon] = useState(true);
   const [overlays, setOverlays] = useState<Overlays>({
     milkyWay: true,
     equatorialGrid: false,
@@ -118,12 +113,7 @@ export function useAstroView() {
     labels: true,
     frameGuides: true,
   });
-  const [criteria, setCriteria] = useState<PlannerCriteria>({ ...DEFAULT_CRITERIA, baseSqm: 21.6 });
-
-  // Keep the planner's base brightness tied to the SQM control.
-  useEffect(() => {
-    setCriteria((c) => (c.baseSqm === sqm ? c : { ...c, baseSqm: sqm }));
-  }, [sqm]);
+  const [criteria, setCriteria] = useState<PlannerCriteria>(DEFAULT_CRITERIA);
 
   /* ------------------------------------------------------------- location */
 
@@ -226,19 +216,19 @@ export function useAstroView() {
       camera.elevation,
     );
     return computeSkyBrightness({
-      baseSqm: skyMode === 'ideal' ? 22.0 : sqm,
-      moonAltitudeDeg: skyMode === 'ideal' ? -90 : skyState.moon.altitude,
+      moonAltitudeDeg: skyState.moon.altitude,
       moonIllumination: skyState.moon.illumination,
       sunMoonEarthAngleDeg: skyState.moon.sunMoonEarthAngleDeg,
       targetAltitudeDeg: Math.max(1, frameCentreAltitude),
       moonSeparationDeg: moonSeparation,
       sunAltitudeDeg: skyState.sun.altitude,
+      includeMoon,
     });
-  }, [skyMode, sqm, skyState, camera.azimuth, camera.elevation]);
+  }, [includeMoon, skyState, camera.azimuth, camera.elevation]);
 
   const renderParameters = useMemo(
-    () => skyRenderParameters(brightness.effectiveSqm, { idealSky: skyMode === 'ideal' }),
-    [brightness.effectiveSqm, skyMode],
+    () => skyRenderParameters(brightness.effectiveSqm),
+    [brightness.effectiveSqm],
   );
 
   /* ------------------------------------------------------- night timeline */
@@ -315,8 +305,7 @@ export function useAstroView() {
     camera,
     sensor,
     sensorFormats: SENSOR_FORMATS,
-    sqm,
-    skyMode,
+    includeMoon,
     overlays,
     criteria,
     playing,
@@ -343,8 +332,7 @@ export function useAstroView() {
     setLocalDateTime,
     updateCamera,
     nudgeOrientation,
-    setSqm,
-    setSkyMode,
+    setIncludeMoon,
     setOverlays,
     setCriteria,
     setPlaying,

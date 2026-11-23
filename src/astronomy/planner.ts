@@ -15,7 +15,8 @@
 import type { GeoLocation } from './coordinates';
 import { type TimelineSample, sampleTimeline } from './sky';
 import { angularSeparationDeg } from './constants';
-import { moonSkyBrightnessNl, nanolambertToSqm, sqmToNanolambert } from '../light-pollution/model';
+import { moonSkyBrightnessNl, nanolambertToSqm, sqmToNanolambert } from '../sky-brightness/model';
+import { NATURAL_SKY_SQM } from './constants';
 
 export interface PlannerCriteria {
   /** Sun must be below this altitude, degrees. */
@@ -24,15 +25,12 @@ export interface PlannerCriteria {
   minGalacticCentreAltitude: number;
   /** Maximum acceptable sky brightening from the Moon, magnitudes. */
   maxMoonPenaltyMag: number;
-  /** Zenith sky brightness without the Moon, mag/arcsec^2. */
-  baseSqm: number;
 }
 
 export const DEFAULT_CRITERIA: PlannerCriteria = {
   maxSunAltitude: -18,
   minGalacticCentreAltitude: 10,
   maxMoonPenaltyMag: 0.5,
-  baseSqm: 21.6,
 };
 
 export interface PlannerWindow {
@@ -76,7 +74,7 @@ function evaluate(sample: TimelineSample, criteria: PlannerCriteria): Evaluated 
     sample.galacticCentreAltitude,
   );
 
-  const baseNl = sqmToNanolambert(criteria.baseSqm);
+  const baseNl = sqmToNanolambert(NATURAL_SKY_SQM);
   const moonNl =
     sample.moonAltitude > 0 && sample.moonIllumination > 0 && sample.galacticCentreAltitude > 0
       ? moonSkyBrightnessNl(
@@ -87,7 +85,7 @@ function evaluate(sample: TimelineSample, criteria: PlannerCriteria): Evaluated 
         )
       : 0;
   const effectiveSqm = nanolambertToSqm(baseNl + moonNl);
-  const moonPenaltyMag = criteria.baseSqm - effectiveSqm;
+  const moonPenaltyMag = NATURAL_SKY_SQM - effectiveSqm;
 
   return {
     sample,

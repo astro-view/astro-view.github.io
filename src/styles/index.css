@@ -39,7 +39,7 @@
   }
   input[type='range']::-webkit-slider-runnable-track {
     height: 3px;
-    @apply rounded-full bg-edge2;
+    @apply rounded-full bg-white/15;
   }
   input[type='range']::-webkit-slider-thumb {
     @apply appearance-none bg-accent rounded-full;
@@ -55,7 +55,7 @@
   }
   input[type='range']::-moz-range-track {
     height: 3px;
-    @apply rounded-full bg-edge2;
+    @apply rounded-full bg-white/15;
   }
   input[type='range']::-moz-range-thumb {
     @apply bg-accent rounded-full border-0;
@@ -69,11 +69,17 @@
   input[type='number'],
   input[type='text'],
   select {
-    @apply bg-panel2 border border-edge rounded text-ink text-xs px-2 py-1.5 outline-none;
+    @apply border border-white/10 bg-white/[0.04] rounded text-ink text-xs px-2 py-1.5 outline-none;
     transition:
       border-color 140ms ease,
       box-shadow 140ms ease;
   }
+  /* Native option popups do not inherit the translucent field background. */
+  option {
+    background-color: #0c111c;
+    color: #e6ecf7;
+  }
+
   input:focus,
   select:focus {
     @apply border-accent;

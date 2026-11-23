@@ -1,24 +1,12 @@
-/**
- * Location panel: a dark world map you click to choose where you are standing.
- *
- * LIGHT POLLUTION OVERLAY
- * No light-pollution raster is bundled: the well-known global atlases are
- * either non-redistributable or require an API key, and embedding a key in a
- * static site would expose it to everyone. The overlay is therefore opt-in and
- * driven by a key the user supplies, kept only in their own browser's
- * localStorage. Without it, the manual SQM control in the right-hand panel is
- * the supported path and works entirely offline.
- */
+/** Location panel: a dark world map you click to choose where you are standing. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl, { type Map as MapLibreMap, type StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Crosshair, Loader2, LocateFixed, Search, X } from 'lucide-react';
-import { Button, Field, Note, Toggle } from '../components/ui/primitives';
+import { Button, Field } from '../components/ui/primitives';
 import { type GeocodeResult, formatCoordinate, searchPlaces } from './geocode';
 import type { AstroViewState } from '../hooks/useAstroView';
 import { clamp } from '../astronomy/constants';
-
-const LP_KEY_STORAGE = 'astroview.lightPollutionApiKey';
 
 /**
  * Basemap: OpenStreetMap standard raster tiles.
@@ -107,14 +95,6 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [showLp, setShowLp] = useState(false);
-  const [lpKey, setLpKey] = useState(() => {
-    try {
-      return localStorage.getItem(LP_KEY_STORAGE) ?? '';
-    } catch {
-      return '';
-    }
-  });
   const [mapError, setMapError] = useState<string | null>(null);
 
   const { location, setLocation } = state;
@@ -206,51 +186,6 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
     el.style.opacity = String(clamp(1 - state.camera.elevation / 110, 0.25, 1));
   }, [state.camera.azimuth, state.camera.elevation, state.fov.horizontal]);
 
-  /* -------------------------------------------- light pollution overlay */
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const apply = () => {
-      const has = map.getSource('lightpollution');
-      if (showLp && lpKey && !has) {
-        map.addSource('lightpollution', {
-          type: 'raster',
-          tiles: [
-            `https://tiles.lightpollutionmap.info/tiles/viirs_2023/{z}/{x}/{y}.png?apikey=${encodeURIComponent(
-              lpKey,
-            )}`,
-          ],
-          tileSize: 256,
-          maxzoom: 8,
-          attribution:
-            'Light pollution: VIIRS/DNB via <a href="https://www.lightpollutionmap.info/">lightpollutionmap.info</a>',
-        });
-        map.addLayer({
-          id: 'lightpollution',
-          type: 'raster',
-          source: 'lightpollution',
-          paint: { 'raster-opacity': 0.55 },
-        });
-      } else if ((!showLp || !lpKey) && has) {
-        if (map.getLayer('lightpollution')) map.removeLayer('lightpollution');
-        map.removeSource('lightpollution');
-      }
-    };
-    if (map.isStyleLoaded()) apply();
-    else map.once('load', apply);
-  }, [showLp, lpKey]);
-
-  const saveKey = useCallback((value: string) => {
-    setLpKey(value);
-    try {
-      if (value) localStorage.setItem(LP_KEY_STORAGE, value);
-      else localStorage.removeItem(LP_KEY_STORAGE);
-    } catch {
-      /* private mode: the key just will not persist */
-    }
-  }, []);
-
   /* ------------------------------------------------------------- search */
 
   const runSearch = useCallback(async () => {
@@ -303,7 +238,7 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
 
   return (
     <div className="flex min-h-0 flex-col overflow-y-auto">
-      <div className="border-b border-edge p-3">
+      <div className="border-b border-white/[0.06] p-3">
         <div className="flex gap-1.5">
           <div className="relative flex-1">
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-dim" />
@@ -344,7 +279,7 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
         {searchError && <p className="mt-2 text-2xs text-warn">{searchError}</p>}
 
         {results.length > 0 && (
-          <ul className="mt-2 max-h-40 overflow-y-auto rounded border border-edge bg-panel2">
+          <ul className="mt-2 max-h-40 overflow-y-auto rounded border border-white/[0.08] bg-[#080b14]/90 backdrop-blur-xl">
             {results.map((r) => (
               <li key={`${r.latitude},${r.longitude},${r.name}`}>
                 <button
@@ -367,13 +302,13 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
             <p className="text-2xs leading-relaxed text-warn">{mapError}</p>
           </div>
         )}
-        <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded border border-edge bg-panel/85 px-2 py-1 text-2xs text-muted backdrop-blur">
+        <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded border border-white/[0.08] bg-[#080b14]/60 px-2 py-1 text-2xs text-muted backdrop-blur-md">
           <Crosshair size={10} className="text-accent" />
           click the map to place the observer
         </div>
       </div>
 
-      <div className="border-t border-edge p-3">
+      <div className="border-t border-white/[0.06] p-3">
         <div className="numeric mb-2 text-xs text-ink">
           {formatCoordinate(location.latitude, location.longitude)}
         </div>
@@ -421,31 +356,6 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
           </Field>
         </div>
 
-        <div className="mt-3 hairline pt-2">
-          <Toggle
-            checked={showLp}
-            onChange={setShowLp}
-            label="Light pollution overlay"
-            hint="Needs your own lightpollutionmap.info API key"
-          />
-          {showLp && (
-            <div className="mt-2 space-y-2">
-              <input
-                type="password"
-                value={lpKey}
-                placeholder="lightpollutionmap.info API key"
-                aria-label="Light pollution API key"
-                className="w-full"
-                onChange={(e) => saveKey(e.target.value)}
-              />
-              <Note>
-                The key is stored only in this browser and is never sent anywhere except to
-                lightpollutionmap.info when it requests tiles. AstroView ships no key of its own:
-                a static site cannot keep one secret. Without a key, use the SQM control instead.
-              </Note>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
