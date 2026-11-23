@@ -17,13 +17,13 @@
  *     frameWidth  = W * tan(Hc) / tan(Ho)
  *     frameHeight = H * tan(Vc) / tan(Vo)
  *
- * centred on the canvas.
+ * centred on the free area the docks leave, not on the canvas.
  */
 import { DEG2RAD, RAD2DEG, clamp } from '../astronomy/constants';
 import type { FieldOfView } from './projection';
 
 /** How much wider than the lens the preview tries to be, in tangent space. */
-export const DEFAULT_OVERVIEW_MARGIN = 1.6;
+export const DEFAULT_OVERVIEW_MARGIN = 1.45;
 
 /**
  * Widest vertical field the overview will use. A rectilinear projection

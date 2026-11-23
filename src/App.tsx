@@ -1,29 +1,25 @@
 /**
  * Application shell.
  *
- * The sky is the application: it fills the window edge to edge, and every
- * control is a floating panel over it. Nothing is letterboxed into a column,
- * and any panel can be folded away, so the sky can always be seen whole.
+ * The sky fills the window; two docks float over it:
  *
- * Layout:
- *   top     one slim status bar - where, when, and whether it is dark
- *   left    location (map)
- *   right   time, camera, sky conditions, astronomy, overlays
- *   bottom  the night timeline and the observation planner
+ *   right   one scrolling column - place, time, camera, sun, moon, overlays
+ *   bottom  the night timeline and planner, spanning the space left of it
+ *
+ * Two docks rather than four scattered cards, so everything lines up against
+ * the same two edges and nothing overlaps. The whole left side stays sky.
  *
  * The dock containers are `pointer-events-none`; only the panels themselves
- * accept events, so dragging the sky still works in the gaps between them.
- * Below `lg` the docks become one bottom sheet with a tab bar, leaving the sky
- * fully visible behind it.
+ * accept events, so dragging the sky still works around them. Below `lg` the
+ * docks become one bottom sheet, leaving the sky visible behind it.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   Aperture,
   Clock,
   Eye,
   EyeOff,
-  Map as MapIcon,
   Maximize2,
   Minimize2,
   Moon,
@@ -31,39 +27,31 @@ import {
   Telescope,
 } from 'lucide-react';
 import { useAstroView } from './hooks/useAstroView';
-import { SkyPreview } from './components/SkyPreview';
+import { SkyPreview, type SafeAreaInsets } from './components/SkyPreview';
 import { ControlPanel } from './components/ControlPanel';
 import { Timeline } from './components/Timeline';
-import { LocationPanel } from './location/LocationPanel';
 import { AttributionButton } from './components/AttributionPanel';
 import { Button, Pill } from './components/ui/primitives';
 import { DockPanel, GLASS, HudChip, HudSep, HudValue } from './components/ui/Dock';
 import { localTimeString } from './astronomy/time';
 
-type Sheet = 'location' | 'controls' | 'timeline';
+/** Right dock width, and the gutter the bottom dock must leave for it. */
+const DOCK_W = '22rem';
 
 export default function App() {
   const state = useAstroView();
 
-  const [openPanels, setOpenPanels] = useState({
-    location: true,
-    controls: true,
-    timeline: true,
-  });
+  const [controlsOpen, setControlsOpen] = useState(true);
+  const [timelineOpen, setTimelineOpen] = useState(true);
   const [chromeHidden, setChromeHidden] = useState(false);
-  const [sheet, setSheet] = useState<Sheet | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
-  const toggle = useCallback(
-    (key: keyof typeof openPanels) => setOpenPanels((p) => ({ ...p, [key]: !p[key] })),
-    [],
-  );
-
-  /** `H` clears every panel so the sky can be judged on its own. */
+  /** `H` clears the panels so the sky can be judged on its own. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
       if (e.key === 'h' || e.key === 'H') setChromeHidden((v) => !v);
     };
     window.addEventListener('keydown', onKey);
@@ -71,9 +59,8 @@ export default function App() {
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    const el = document.documentElement;
     if (!document.fullscreenElement) {
-      el.requestFullscreen?.().then(
+      document.documentElement.requestFullscreen?.().then(
         () => setFullscreen(true),
         () => undefined,
       );
@@ -85,103 +72,124 @@ export default function App() {
     }
   }, []);
 
+  /**
+   * Measure the docks so the camera frame can be centred in the area they
+   * leave free. Measured rather than hard-coded, because a dock's height
+   * changes when it is collapsed or when its content wraps.
+   */
+  const rightDockRef = useRef<HTMLDivElement | null>(null);
+  const bottomDockRef = useRef<HTMLDivElement | null>(null);
+  const [insets, setInsets] = useState<SafeAreaInsets>({ top: 52, right: 0, bottom: 0, left: 12 });
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const wide = window.matchMedia('(min-width: 1024px)').matches;
+      if (chromeHidden || !wide) {
+        setInsets({ top: 0, right: 0, bottom: 0, left: 0 });
+        return;
+      }
+      const right = rightDockRef.current?.getBoundingClientRect();
+      const bottom = bottomDockRef.current?.getBoundingClientRect();
+      setInsets({
+        top: 52,
+        right: right ? Math.max(0, window.innerWidth - right.left) + 12 : 0,
+        bottom: bottom ? Math.max(0, window.innerHeight - bottom.top) + 12 : 0,
+        left: 12,
+      });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (rightDockRef.current) ro.observe(rightDockRef.current);
+    if (bottomDockRef.current) ro.observe(bottomDockRef.current);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [chromeHidden, controlsOpen, timelineOpen]);
+
   const { camera, fov, skyState, brightness } = state;
   const dark = skyState.astronomicallyDark;
-  const coreTone =
-    skyState.galacticCentre.altitude > 10
-      ? 'good'
-      : skyState.galacticCentre.altitude > 0
-        ? 'warn'
-        : 'bad';
+  const coreAlt = skyState.galacticCentre.altitude;
+  const coreTone = coreAlt > 10 ? 'good' : coreAlt > 0 ? 'warn' : 'bad';
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-void">
-      {/* ---------------------------------------------------------- the sky */}
-      <SkyPreview state={state} />
+      <SkyPreview state={state} insets={insets} />
 
       {/* ------------------------------------------------------- status bar */}
       <header
         className={clsx(
-          'pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-2 px-2.5 py-2 transition-opacity duration-200',
-          chromeHidden && 'pointer-events-none opacity-0',
+          'pointer-events-none absolute inset-x-0 top-0 z-20 transition-opacity duration-200',
+          chromeHidden && 'opacity-0',
         )}
       >
-        <span
-          className={clsx(
-            'pointer-events-auto flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5',
-            GLASS,
-          )}
-        >
-          <Telescope size={15} className="text-accent" />
-          <span className="text-xs font-semibold tracking-tight text-ink">AstroView</span>
-        </span>
+        {/* A scrim keeps the bar legible over a bright patch of sky without
+            needing a solid fill across the whole width. */}
+        <div className="pointer-events-none absolute inset-0 h-16 bg-gradient-to-b from-black/60 to-transparent" />
+        <div className="relative flex items-center gap-2 px-3 py-2.5">
+          <span className="pointer-events-auto flex shrink-0 items-center gap-2">
+            <Telescope size={16} className="text-accent" />
+            <span className="text-sm font-semibold tracking-tight text-ink">AstroView</span>
+          </span>
 
-        <div className="pointer-events-auto hidden min-w-0 items-center gap-2 md:flex">
-          <HudChip className="min-w-0">
-            <span className="truncate text-ink" title={state.locationName}>
+          <span className="mx-1 hidden h-4 w-px shrink-0 bg-white/10 md:block" />
+
+          <div className="pointer-events-auto hidden min-w-0 items-baseline gap-3 md:flex">
+            <span className="truncate text-xs text-muted" title={state.locationName}>
               {state.locationName}
             </span>
-          </HudChip>
-          <HudChip>
-            {state.localDate} {localTimeString(state.date, state.timeZone)}
-            <HudSep />
-            <span className="text-dim">{state.timeZone}</span>
-          </HudChip>
-        </div>
+            <span className="numeric shrink-0 text-xs text-ink">
+              {localTimeString(state.date, state.timeZone)}
+            </span>
+            <span className="numeric hidden shrink-0 text-[11px] text-dim lg:inline">
+              {state.localDate}
+            </span>
+          </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="pointer-events-auto hidden sm:block">
-            <Pill tone={dark ? 'good' : skyState.sun.altitude > -6 ? 'bad' : 'warn'}>
-              {dark
-                ? 'Astronomical darkness'
-                : skyState.sun.altitude > -0.833
-                  ? 'Daylight'
-                  : 'Twilight'}
-            </Pill>
-          </span>
-          <span className="pointer-events-auto hidden sm:block">
-            <Pill tone={coreTone}>Core {skyState.galacticCentre.altitude.toFixed(1)}&deg;</Pill>
-          </span>
-          <span className={clsx('pointer-events-auto rounded-lg', GLASS)}>
-            <AttributionButton />
-          </span>
-          <span className="pointer-events-auto">
-            <Button
-              size="sm"
-              onClick={() => setChromeHidden(true)}
-              title="Hide all panels (H)"
-              className={GLASS}
-            >
-              <EyeOff size={12} />
-            </Button>
-          </span>
-          <span className="pointer-events-auto">
-            <Button
-              size="sm"
-              onClick={toggleFullscreen}
-              title="Fullscreen"
-              className={GLASS}
-            >
-              {fullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-            </Button>
-          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="pointer-events-auto hidden sm:block">
+              <Pill tone={dark ? 'good' : skyState.sun.altitude > -6 ? 'bad' : 'warn'}>
+                {dark ? 'Dark' : skyState.sun.altitude > -0.833 ? 'Daylight' : 'Twilight'}
+              </Pill>
+            </span>
+            <span className="pointer-events-auto hidden sm:block">
+              <Pill tone={coreTone}>Core {coreAlt.toFixed(0)}&deg;</Pill>
+            </span>
+            <span className="pointer-events-auto">
+              <AttributionButton />
+            </span>
+            <span className="pointer-events-auto">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setChromeHidden(true)}
+                title="Hide panels (H)"
+              >
+                <EyeOff size={13} />
+              </Button>
+            </span>
+            <span className="pointer-events-auto">
+              <Button size="sm" variant="ghost" onClick={toggleFullscreen} title="Fullscreen">
+                {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </Button>
+            </span>
+          </div>
         </div>
       </header>
 
-      {/* ------------------------------------------------- camera read-out */}
+      {/* -------------------------------------------------- camera read-out */}
       <div
         className={clsx(
-          'pointer-events-none absolute bottom-2 left-1/2 z-20 flex -translate-x-1/2 flex-wrap justify-center gap-1.5 px-2 transition-opacity duration-200 lg:bottom-auto lg:left-2.5 lg:top-14 lg:translate-x-0 lg:justify-start',
+          'pointer-events-none absolute left-3 top-[3.4rem] z-20 hidden flex-col items-start gap-1.5 transition-opacity duration-200 lg:flex',
           chromeHidden && 'opacity-0',
         )}
       >
         <HudChip>
-          <Aperture size={10} className="text-accent" />
-          <span className="text-ink">
-            {camera.focalLength < 10
-              ? camera.focalLength.toFixed(1)
-              : camera.focalLength.toFixed(0)}
-            mm
+          <Aperture size={11} className="text-accent" />
+          <span className="text-sm text-ink">
+            {camera.focalLength < 10 ? camera.focalLength.toFixed(1) : camera.focalLength.toFixed(0)}
+            <span className="text-[10px] text-dim"> mm</span>
           </span>
           <HudSep />
           {fov.horizontal.toFixed(1)}&deg; &times; {fov.vertical.toFixed(1)}&deg;
@@ -202,7 +210,7 @@ export default function App() {
             brightness.moonPenaltyMag > 1 ? 'bad' : brightness.moonPenaltyMag > 0.3 ? 'warn' : 'good'
           }
         >
-          <Moon size={10} />
+          <Moon size={11} />
           {(skyState.moon.illumination * 100).toFixed(0)}%
           <HudSep />
           <HudValue label="alt">{skyState.moon.altitude.toFixed(0)}&deg;</HudValue>
@@ -215,37 +223,20 @@ export default function App() {
         </HudChip>
       </div>
 
-      {/* ------------------------------------------------------- left dock */}
+      {/* ------------------------------------------------------- right dock */}
       <div
         className={clsx(
-          'pointer-events-none absolute bottom-3 left-2.5 top-24 z-10 hidden w-[20rem] flex-col justify-end transition-opacity duration-200 lg:flex',
-          chromeHidden && 'pointer-events-none opacity-0',
+          'pointer-events-none absolute bottom-3 right-3 top-[3.4rem] z-10 hidden flex-col transition-opacity duration-200 lg:flex',
+          chromeHidden && 'opacity-0',
         )}
-      >
-        <DockPanel
-          title="Location"
-          icon={<MapIcon size={12} />}
-          open={openPanels.location}
-          onToggle={() => toggle('location')}
-          className="max-h-full"
-          bodyClassName="flex min-h-0 flex-col"
-        >
-          <LocationPanel state={state} />
-        </DockPanel>
-      </div>
-
-      {/* ------------------------------------------------------ right dock */}
-      <div
-        className={clsx(
-          'pointer-events-none absolute bottom-3 right-2.5 top-14 z-10 hidden w-[21.5rem] flex-col transition-opacity duration-200 lg:flex',
-          chromeHidden && 'pointer-events-none opacity-0',
-        )}
+        style={{ width: DOCK_W }}
+        ref={rightDockRef}
       >
         <DockPanel
           title="Controls"
           icon={<Sliders size={12} />}
-          open={openPanels.controls}
-          onToggle={() => toggle('controls')}
+          open={controlsOpen}
+          onToggle={() => setControlsOpen((v) => !v)}
           className="max-h-full"
           bodyClassName="flex min-h-0 flex-col"
         >
@@ -253,18 +244,20 @@ export default function App() {
         </DockPanel>
       </div>
 
-      {/* ----------------------------------------------------- bottom dock */}
+      {/* ------------------------------------------------------ bottom dock */}
       <div
         className={clsx(
-          'pointer-events-none absolute bottom-3 left-[21.5rem] right-[22.5rem] z-10 hidden transition-opacity duration-200 lg:block',
-          chromeHidden && 'pointer-events-none opacity-0',
+          'pointer-events-none absolute bottom-3 left-3 z-10 hidden transition-opacity duration-200 lg:block',
+          chromeHidden && 'opacity-0',
         )}
+        style={{ right: `calc(${DOCK_W} + 1.5rem)` }}
+        ref={bottomDockRef}
       >
         <DockPanel
-          title="Night timeline and planner"
+          title="Night timeline"
           icon={<Clock size={12} />}
-          open={openPanels.timeline}
-          onToggle={() => toggle('timeline')}
+          open={timelineOpen}
+          onToggle={() => setTimelineOpen((v) => !v)}
         >
           <Timeline state={state} />
         </DockPanel>
@@ -274,87 +267,55 @@ export default function App() {
       <div
         className={clsx(
           'pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col lg:hidden',
-          chromeHidden && 'pointer-events-none opacity-0',
+          chromeHidden && 'opacity-0',
         )}
       >
-        {sheet && (
+        {sheetOpen && (
           <div
             className={clsx(
-              'pointer-events-auto max-h-[62vh] animate-slideUp overflow-hidden rounded-t-xl',
+              'pointer-events-auto max-h-[64vh] animate-slideUp overflow-y-auto rounded-t-xl',
               GLASS,
             )}
           >
-            <div className="flex max-h-[62vh] flex-col overflow-y-auto">
-              {sheet === 'location' && <LocationPanel state={state} />}
-              {sheet === 'controls' && <ControlPanel state={state} />}
-              {sheet === 'timeline' && <Timeline state={state} />}
-            </div>
+            <ControlPanel state={state} />
+            <Timeline state={state} />
           </div>
         )}
         <nav
           className={clsx(
-            'pointer-events-auto flex border-t border-white/[0.07] bg-[#080b14]/75 backdrop-blur-xl',
-            !sheet && 'rounded-t-xl border-x',
+            'pointer-events-auto flex items-center gap-2 border-t border-white/[0.07] bg-[#080b14]/75 px-3 py-2 backdrop-blur-xl',
+            !sheetOpen && 'rounded-t-xl border-x',
           )}
         >
-          {(
-            [
-              ['location', 'Place', <MapIcon key="m" size={15} />],
-              ['controls', 'Controls', <Sliders key="s" size={15} />],
-              ['timeline', 'Night', <Clock key="t" size={15} />],
-            ] as const
-          ).map(([id, label, icon]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setSheet((s) => (s === id ? null : (id as Sheet)))}
-              className={clsx(
-                'flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs transition-colors',
-                sheet === id ? 'text-accent2' : 'text-dim hover:text-muted',
-              )}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setSheet(null)}
-            className={clsx(
-              'flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs transition-colors',
-              sheet === null ? 'text-accent2' : 'text-dim hover:text-muted',
+          <span className="numeric flex-1 truncate text-[11px] text-muted">
+            {camera.focalLength.toFixed(0)}mm &middot; az {camera.azimuth.toFixed(0)}&deg; &middot;
+            core {coreAlt.toFixed(0)}&deg;
+          </span>
+          <Button size="sm" active={sheetOpen} onClick={() => setSheetOpen((v) => !v)}>
+            {sheetOpen ? (
+              <Eye size={13} className="mr-1 inline" />
+            ) : (
+              <Sliders size={13} className="mr-1 inline" />
             )}
-          >
-            <Eye size={15} />
-            Sky
-          </button>
+            {sheetOpen ? 'Sky' : 'Controls'}
+          </Button>
         </nav>
       </div>
 
-      {/* Bring the panels back after `H` or the hide button. */}
       {chromeHidden && (
         <button
           type="button"
           onClick={() => setChromeHidden(false)}
           title="Show panels (H)"
           className={clsx(
-            'absolute right-2.5 top-2 z-30 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-2xs text-muted transition-colors hover:text-ink',
+            'absolute right-3 top-3 z-30 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] text-muted transition-colors hover:text-ink',
             GLASS,
           )}
         >
-          <Eye size={12} />
+          <Eye size={13} />
           Show panels
         </button>
       )}
-
-      <div
-        className={clsx(
-          'pointer-events-none absolute bottom-3 left-1/2 z-10 hidden -translate-x-1/2 text-2xs text-dim transition-opacity lg:block',
-          !chromeHidden && 'opacity-0',
-        )}
-      >
-        drag to aim &middot; scroll to zoom the lens &middot; H to show panels
-      </div>
     </div>
   );
 }

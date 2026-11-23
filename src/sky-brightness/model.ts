@@ -161,12 +161,15 @@ export function skyRenderParameters(effectiveSqm: number): SkyRenderParameters {
   const naturalNl = sqmToNanolambert(NATURAL_SKY_SQM);
   const excess = Math.max(1, nl / naturalNl);
 
-  const backgroundLevel = clamp(0.004 + 0.1 * Math.pow(excess - 1, 0.45), 0.004, 0.42);
+  // The cap matters: a full moon high overhead is ~37x the natural background,
+  // and letting that run linearly produces a pale grey screen rather than the
+  // deep blue a moonlit exposure actually records.
+  const backgroundLevel = clamp(0.004 + 0.05 * Math.pow(excess - 1, 0.33), 0.004, 0.13);
   const contrast = clamp(Math.pow(1 / excess, 0.55), 0.06, 1);
 
   return {
     backgroundLevel,
-    glowColor: [0.34, 0.45, 0.68],
+    glowColor: [0.26, 0.38, 0.62],
     limitingMagnitude: clamp(limitingMagnitude(effectiveSqm) + 1.0, 2.0, 6.5),
     milkyWayContrast: contrast,
     milkyWayExposure: clamp(1.05 + 0.45 * contrast, 1.05, 1.5),

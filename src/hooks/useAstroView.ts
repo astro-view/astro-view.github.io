@@ -22,6 +22,7 @@ import {
 import {
   localDateString,
   localMidnight,
+  localPartsToUtc,
   localTimeString,
   parseLocalDateTime,
   timeZoneForLocation,
@@ -86,10 +87,15 @@ export function useAstroView() {
     timeZoneForLocation(DEFAULT_LOCATION.latitude, DEFAULT_LOCATION.longitude),
   );
   const [date, setDate] = useState<Date>(() => {
-    // Open on tonight's astronomical dark hours rather than "now at noon".
-    const d = new Date();
-    d.setHours(23, 0, 0, 0);
-    return d;
+    // Open at 22:00 tonight AT THE SITE, not in the browser's own time zone.
+    // Using the browser's clock put the app in broad daylight whenever the two
+    // zones differ, which is the normal case for a planning tool.
+    const tz = timeZoneForLocation(DEFAULT_LOCATION.latitude, DEFAULT_LOCATION.longitude);
+    const today = utcToLocalParts(new Date(), tz);
+    return localPartsToUtc(
+      { year: today.year, month: today.month, day: today.day, hour: 22, minute: 0, second: 0 },
+      tz,
+    ).date;
   });
 
   const [camera, setCamera] = useState<CameraState>({
@@ -230,6 +236,25 @@ export function useAstroView() {
     () => skyRenderParameters(brightness.effectiveSqm),
     [brightness.effectiveSqm],
   );
+
+  /**
+   * On first load, aim at the highest point of the Milky Way band.
+   *
+   * A fixed default direction lands on empty sky whenever the band happens to
+   * be elsewhere, which makes a working app look broken. This uses the real
+   * computed geometry, and runs once so it never fights the user afterwards.
+   */
+  const aimedOnce = useRef(false);
+  useEffect(() => {
+    if (aimedOnce.current) return;
+    aimedOnce.current = true;
+    if (bandVisibility.highestAltitude <= 0) return;
+    setCamera((c) => ({
+      ...c,
+      azimuth: wrapAzimuth(bandVisibility.highestAzimuth),
+      elevation: clampElevation(Math.min(bandVisibility.highestAltitude, 55)),
+    }));
+  }, [bandVisibility]);
 
   /* ------------------------------------------------------- night timeline */
 

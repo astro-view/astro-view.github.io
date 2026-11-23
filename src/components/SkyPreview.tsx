@@ -52,7 +52,26 @@ interface OverlayMarker {
 
 const GC_VECTOR = equatorialToVector(GALACTIC_CENTRE.raDeg, GALACTIC_CENTRE.decDeg);
 
-export function SkyPreview({ state }: { state: AstroViewState }) {
+/**
+ * Pixels along each edge that the floating docks cover. The sky still renders
+ * edge to edge; this only says where the camera frame may sit.
+ */
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+const NO_INSETS: SafeAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+
+export function SkyPreview({
+  state,
+  insets = NO_INSETS,
+}: {
+  state: AstroViewState;
+  insets?: SafeAreaInsets;
+}) {
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<SkyRenderer | null>(null);
@@ -64,10 +83,23 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
 
   const { camera, fov, basis, celestialMatrix, skyState, renderParameters, overlays } = state;
 
-  /** The wider field the canvas shows, and where the lens' frame sits inside it. */
+  /**
+   * The area the docks leave free. The sky fills the whole canvas, but the
+   * optical axis and the camera frame live here, so the frame is never hidden
+   * behind a panel.
+   */
+  const safe = useMemo(() => {
+    const left = insets.left;
+    const top = insets.top;
+    const width = Math.max(120, size.width - insets.left - insets.right);
+    const height = Math.max(120, size.height - insets.top - insets.bottom);
+    return { left, top, width, height, centreX: left + width / 2, centreY: top + height / 2 };
+  }, [insets, size.width, size.height]);
+
+  /** The wider field shown across the safe area, and the lens' frame inside it. */
   const overview = useMemo(
-    () => computeOverview(fov, size.width, size.height),
-    [fov, size.width, size.height],
+    () => computeOverview(fov, safe.width, safe.height),
+    [fov, safe.width, safe.height],
   );
 
   /* ------------------------------------------------------- renderer setup */
@@ -184,10 +216,15 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
       elevation: camera.elevation,
       roll: camera.roll,
       fovVertical: overview.fov.vertical,
-      aspect: overview.fov.aspect,
+      axisX: safe.centreX,
+      axisY: safe.centreY,
+      safeWidth: safe.width,
+      safeHeight: safe.height,
+      canvasWidth: size.width,
+      canvasHeight: size.height,
     });
     r.render();
-  }, [celestialMatrix, renderParameters, overlays, camera, overview, size, status]);
+  }, [celestialMatrix, renderParameters, overlays, camera, overview, safe, size, status]);
 
   /* ------------------------------------------- drag to aim, wheel to zoom */
 
@@ -210,8 +247,8 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
     setFocal: (_f: number) => {},
   });
 
-  interaction.current.width = size.width;
-  interaction.current.height = size.height;
+  interaction.current.width = safe.width;
+  interaction.current.height = safe.height;
   interaction.current.overviewHorizontal = overview.fov.horizontal;
   interaction.current.overviewVertical = overview.fov.vertical;
   interaction.current.elevation = camera.elevation;
@@ -326,8 +363,8 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
       out.push({
         key,
         label,
-        x: ((wide.x + 1) / 2) * size.width,
-        y: ((1 - wide.y) / 2) * size.height,
+        x: safe.centreX + wide.x * (safe.width / 2),
+        y: safe.centreY - wide.y * (safe.height / 2),
         kind,
         detail,
         inFrame: lens.inFrame,
@@ -380,8 +417,7 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
     basis,
     fov,
     overview.fov,
-    size.width,
-    size.height,
+    safe,
     celestialMatrix,
     skyState,
     names,
@@ -391,8 +427,8 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
   const frameStyle = {
     width: overview.frameWidth,
     height: overview.frameHeight,
-    left: (size.width - overview.frameWidth) / 2,
-    top: (size.height - overview.frameHeight) / 2,
+    left: safe.centreX - overview.frameWidth / 2,
+    top: safe.centreY - overview.frameHeight / 2,
   } as const;
 
   const extremeWideAngle = fov.horizontal > RECTILINEAR_PRACTICAL_FOV_DEG;
@@ -436,12 +472,6 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
             <span className="absolute -right-px -top-px h-3.5 w-3.5 border-r-2 border-t-2 border-accent" />
             <span className="absolute -bottom-px -left-px h-3.5 w-3.5 border-b-2 border-l-2 border-accent" />
             <span className="absolute -bottom-px -right-px h-3.5 w-3.5 border-b-2 border-r-2 border-accent" />
-            <span className="numeric absolute -top-5 left-0 text-2xs text-accent2">
-              {camera.focalLength < 10
-                ? camera.focalLength.toFixed(1)
-                : camera.focalLength.toFixed(0)}
-              mm &middot; {fov.horizontal.toFixed(1)}&deg; &times; {fov.vertical.toFixed(1)}&deg;
-            </span>
           </div>
         </div>
       )}
@@ -468,7 +498,9 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
                 </span>
               </div>
             ) : m.kind === 'cardinal' ? (
-              <span className="rounded border border-accent/30 bg-void/75 px-1.5 py-px text-2xs font-bold tracking-wider text-accent2">
+              // Lifted clear of the horizon line it marks, so it reads as a
+              // label on the horizon rather than a tag sliced by it.
+              <span className="-mt-3 block rounded border border-accent/30 bg-void/75 px-1.5 py-px text-2xs font-bold tracking-wider text-accent2">
                 {m.label}
               </span>
             ) : m.kind === 'moon' || m.kind === 'sun' ? (
@@ -490,6 +522,17 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
           </div>
         ))}
       </div>
+
+      {/* A moonlit sky is legitimately almost empty. Say so, so it does not
+          read as a failure to render anything. */}
+      {status === 'ready' && state.brightness.moonPenaltyMag > 1 && (
+        <div
+          className="pointer-events-none absolute -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/[0.07] bg-[#080b14]/70 px-2.5 py-1 text-2xs text-warn backdrop-blur-md"
+          style={{ left: safe.centreX, top: safe.centreY + overview.frameHeight / 2 + 14 }}
+        >
+          Moonlight is washing out the Milky Way
+        </div>
+      )}
 
       {(extremeWideAngle || overview.frameExceedsView) && status === 'ready' && (
         <div

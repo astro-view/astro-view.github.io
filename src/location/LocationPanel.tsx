@@ -237,8 +237,8 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
   }, [setLocation]);
 
   return (
-    <div className="flex min-h-0 flex-col overflow-y-auto">
-      <div className="border-b border-white/[0.06] p-3">
+    <div>
+      <div className="mb-2">
         <div className="flex gap-1.5">
           <div className="relative flex-1">
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-dim" />
@@ -295,25 +295,25 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
         )}
       </div>
 
-      <div className="relative h-52 shrink-0">
+      <div className="relative h-40 overflow-hidden rounded-md border border-white/[0.08]">
         <div ref={containerRef} className="absolute inset-0" />
         {mapError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-panel/90 p-4">
+          <div className="absolute inset-0 flex items-center justify-center bg-[#080b14]/90 p-4">
             <p className="text-2xs leading-relaxed text-warn">{mapError}</p>
           </div>
         )}
-        <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded border border-white/[0.08] bg-[#080b14]/60 px-2 py-1 text-2xs text-muted backdrop-blur-md">
-          <Crosshair size={10} className="text-accent" />
-          click the map to place the observer
+        <div className="pointer-events-none absolute left-1.5 top-1.5 flex items-center gap-1 rounded border border-white/[0.08] bg-[#080b14]/70 px-1.5 py-0.5 text-[10px] text-muted backdrop-blur-md">
+          <Crosshair size={9} className="text-accent" />
+          click to place
         </div>
       </div>
 
-      <div className="border-t border-white/[0.06] p-3">
-        <div className="numeric mb-2 text-xs text-ink">
+      <div className="mt-2">
+        <div className="numeric truncate text-xs text-ink">
           {formatCoordinate(location.latitude, location.longitude)}
         </div>
-        <div className="mb-3 truncate text-2xs text-dim" title={state.locationName}>
-          {state.locationName} &middot; {state.timeZone}
+        <div className="mb-2 truncate text-[10px] text-dim" title={state.locationName}>
+          {state.locationName}
         </div>
 
         <div className="grid grid-cols-3 gap-2">

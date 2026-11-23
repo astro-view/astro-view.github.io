@@ -330,11 +330,17 @@ export function moonToGalacticCentreSeparation(state: SkyState): number {
 export function milkyWayBandVisibility(
   date: Date,
   location: GeoLocation,
-): { fractionAboveHorizon: number; highestAltitude: number; highestLongitude: number } {
+): {
+  fractionAboveHorizon: number;
+  highestAltitude: number;
+  highestAzimuth: number;
+  highestLongitude: number;
+} {
   const m = equatorialToEnuMatrix(date, location);
   let above = 0;
   let n = 0;
   let highestAltitude = -90;
+  let highestAzimuth = 180;
   let highestLongitude = 0;
   for (let l = 0; l < 360; l += 2) {
     const eq = galacticEquatorPoint(l);
@@ -342,11 +348,12 @@ export function milkyWayBandVisibility(
     if (h.altitude > 0) above++;
     if (h.altitude > highestAltitude) {
       highestAltitude = h.altitude;
+      highestAzimuth = h.azimuth;
       highestLongitude = l;
     }
     n++;
   }
-  return { fractionAboveHorizon: above / n, highestAltitude, highestLongitude };
+  return { fractionAboveHorizon: above / n, highestAltitude, highestAzimuth, highestLongitude };
 }
 
 import { galacticToEquatorial } from './coordinates';

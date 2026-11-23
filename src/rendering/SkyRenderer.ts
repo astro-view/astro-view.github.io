@@ -48,10 +48,21 @@ export interface OrientationState {
   azimuth: number;
   elevation: number;
   roll: number;
-  /** Vertical field of view in degrees. */
+  /**
+   * Vertical field of view in degrees, spanning `safeHeight` pixels - NOT the
+   * whole canvas. The sky is drawn edge to edge, but the optical axis sits at
+   * the centre of the area the panels leave free, so the camera frame is never
+   * hidden behind a dock.
+   */
   fovVertical: number;
-  /** width / height of the camera frame. */
-  aspect: number;
+  /** Canvas pixel position of the optical axis. */
+  axisX: number;
+  axisY: number;
+  /** The free area the field of view is measured across, in canvas pixels. */
+  safeWidth: number;
+  safeHeight: number;
+  canvasWidth: number;
+  canvasHeight: number;
 }
 
 /** B-V colour index to a linear RGB tint. Rough but monotonic and stable. */
@@ -521,10 +532,28 @@ export class SkyRenderer {
   }
 
   setOrientation(o: OrientationState): void {
-    // This is the OVERVIEW field, which is wider than the lens: the preview
-    // shows what is just outside the frame. See src/camera/overview.ts.
-    this.camera.fov = clamp(o.fovVertical, 0.2, 165);
-    this.camera.aspect = o.aspect;
+    // The OVERVIEW field, wider than the lens, so the view shows what is just
+    // outside the frame. See src/camera/overview.ts.
+    //
+    // The axis is generally NOT at the canvas centre, so the frustum is
+    // off-axis. `setViewOffset` expresses that: we describe a symmetric
+    // virtual view centred on the axis and large enough to contain the canvas,
+    // then render the canvas as a window onto it.
+    const halfTan = Math.tan((clamp(o.fovVertical, 0.2, 165) / 2) * (Math.PI / 180));
+    const fullW = 2 * Math.max(o.axisX, o.canvasWidth - o.axisX);
+    const fullH = 2 * Math.max(o.axisY, o.canvasHeight - o.axisY);
+    const fullHalfTan = (halfTan * (fullH / 2)) / Math.max(1, o.safeHeight / 2);
+
+    this.camera.fov = clamp((2 * Math.atan(fullHalfTan) * 180) / Math.PI, 0.2, 170);
+    this.camera.aspect = fullW / fullH;
+    this.camera.setViewOffset(
+      fullW,
+      fullH,
+      fullW / 2 - o.axisX,
+      fullH / 2 - o.axisY,
+      o.canvasWidth,
+      o.canvasHeight,
+    );
 
     // Build the view matrix from the camera basis directly: three.js lookAt
     // cannot express roll, and we want the exact same basis the projection

@@ -16,7 +16,7 @@ import { localTimeString } from '../astronomy/time';
 import type { AstroViewState } from '../hooks/useAstroView';
 import { TWILIGHT } from '../astronomy/constants';
 
-const HEIGHT = 128;
+const HEIGHT = 148;
 const PAD_TOP = 10;
 const PAD_BOTTOM = 20;
 
@@ -93,13 +93,9 @@ export function Timeline({ state }: { state: AstroViewState }) {
       {/* ------------------------------------------------------------- chart */}
       <div className="min-w-0 flex-1">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <h2 className="panel-title">Night timeline</h2>
-            <span className="numeric text-2xs text-dim">
-              {localTimeString(nightAnchor, timeZone)} &rarr; {localTimeString(nightEnd, timeZone)}{' '}
-              local
-            </span>
-          </div>
+          <span className="numeric text-2xs text-dim">
+            {localTimeString(nightAnchor, timeZone)} &rarr; {localTimeString(nightEnd, timeZone)} local
+          </span>
           <div className="flex items-center gap-1.5">
             <Button
               size="sm"
@@ -136,7 +132,7 @@ export function Timeline({ state }: { state: AstroViewState }) {
             ref={svgRef}
             viewBox={`0 0 100 ${HEIGHT}`}
             preserveAspectRatio="none"
-            className="block h-32 w-full cursor-crosshair touch-none"
+            className="block h-[148px] w-full cursor-crosshair touch-none"
             onPointerDown={(e) => {
               (e.target as Element).setPointerCapture?.(e.pointerId);
               scrub(e.clientX);
@@ -280,13 +276,13 @@ export function Timeline({ state }: { state: AstroViewState }) {
       </div>
 
       {/* ------------------------------------------------------------ planner */}
-      <div className="w-full shrink-0 lg:w-80">
+      <div className="w-full shrink-0 lg:w-[20rem]">
         <div className="mb-2 flex items-center gap-2">
           <Target size={12} className="text-accent" />
           <h2 className="panel-title">Observation planner</h2>
         </div>
 
-        <div className="mb-2 grid grid-cols-2 gap-2">
+        <div className="mb-2 space-y-2">
           <Field label="Min core altitude" value={`${criteria.minGalacticCentreAltitude}°`} className="mb-0">
             <Slider
               min={0}

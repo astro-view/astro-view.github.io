@@ -1,8 +1,14 @@
-/** The controls dock: time, camera, sky, overlays. Numbers over prose. */
-import { Aperture, CalendarClock, Layers, Moon, Sun, Telescope } from 'lucide-react';
+/**
+ * The controls dock: place, time, camera, sky, overlays.
+ *
+ * One scrolling column on the right, so the sky keeps the whole left side and
+ * nothing overlaps anything. Numbers over prose.
+ */
+import { Aperture, CalendarClock, Layers, MapPin, Moon, Sun, Telescope } from 'lucide-react';
 import { Button, CollapsibleSection, Field, Slider, Stat, Toggle } from './ui/primitives';
 import { FOCAL_MAX, FOCAL_MIN, FOCAL_PRESETS } from '../camera/sensors';
 import { formatUtcOffset, localTimeString } from '../astronomy/time';
+import { LocationPanel } from '../location/LocationPanel';
 import type { AstroViewState } from '../hooks/useAstroView';
 
 const deg = (v: number, digits = 1) => `${v.toFixed(digits)}°`;
@@ -36,6 +42,11 @@ export function ControlPanel({ state }: { state: AstroViewState }) {
 
   return (
     <div className="flex min-h-0 flex-col overflow-y-auto">
+      {/* ----------------------------------------------------------- place */}
+      <CollapsibleSection title="Place" icon={<MapPin size={12} />}>
+        <LocationPanel state={state} />
+      </CollapsibleSection>
+
       {/* ------------------------------------------------------------- time */}
       <CollapsibleSection title="Time" icon={<CalendarClock size={12} />}>
         <div className="mb-2 grid grid-cols-2 gap-2">
