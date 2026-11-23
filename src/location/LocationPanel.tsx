@@ -1,0 +1,389 @@
+/**
+ * Location panel: a dark world map you click to choose where you are standing.
+ *
+ * LIGHT POLLUTION OVERLAY
+ * No light-pollution raster is bundled: the well-known global atlases are
+ * either non-redistributable or require an API key, and embedding a key in a
+ * static site would expose it to everyone. The overlay is therefore opt-in and
+ * driven by a key the user supplies, kept only in their own browser's
+ * localStorage. Without it, the manual SQM control in the right-hand panel is
+ * the supported path and works entirely offline.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import maplibregl, { type Map as MapLibreMap, type StyleSpecification } from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { Crosshair, Loader2, LocateFixed, Search, X } from 'lucide-react';
+import { Button, Field, Note, Toggle } from '../components/ui/primitives';
+import { type GeocodeResult, formatCoordinate, searchPlaces } from './geocode';
+import type { AstroViewState } from '../hooks/useAstroView';
+import { clamp } from '../astronomy/constants';
+
+const LP_KEY_STORAGE = 'astroview.lightPollutionApiKey';
+
+/**
+ * Basemap: OpenStreetMap standard raster tiles.
+ *
+ * Keyless on purpose. The good-looking dark basemaps (CARTO, Mapbox, Stadia and
+ * the rest) all want an API key now, and a static site cannot keep one secret,
+ * so instead the plain OSM tiles are darkened with MapLibre's own raster paint
+ * filters. That costs nothing, needs no account, and keeps the instrument look.
+ *
+ * OSM's tile usage policy covers light, interactive use like this; attribution
+ * is required and is displayed by the attribution control.
+ */
+const BASE_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    osm: {
+      type: 'raster',
+      tiles: [
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      ],
+      tileSize: 256,
+      maxzoom: 18,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    },
+  },
+  layers: [
+    { id: 'background', type: 'background', paint: { 'background-color': '#05070d' } },
+    {
+      id: 'osm',
+      type: 'raster',
+      source: 'osm',
+      paint: {
+        'raster-opacity': 0.85,
+        'raster-brightness-min': 0.0,
+        'raster-brightness-max': 0.42,
+        'raster-saturation': -0.45,
+        'raster-contrast': 0.12,
+        'raster-hue-rotate': 190,
+      },
+    },
+  ],
+};
+
+export function LocationPanel({ state }: { state: AstroViewState }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<GeocodeResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [showLp, setShowLp] = useState(false);
+  const [lpKey, setLpKey] = useState(() => {
+    try {
+      return localStorage.getItem(LP_KEY_STORAGE) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const [mapError, setMapError] = useState<string | null>(null);
+
+  const { location, setLocation } = state;
+
+  /* ------------------------------------------------------------- map init */
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let map: MapLibreMap;
+    try {
+      map = new maplibregl.Map({
+        container,
+        style: BASE_STYLE,
+        center: [location.longitude, location.latitude],
+        zoom: 4,
+        attributionControl: { compact: true },
+        maxZoom: 14,
+        dragRotate: false,
+        pitchWithRotate: false,
+      });
+    } catch {
+      setMapError(
+        'The map could not start (WebGL unavailable). Enter latitude and longitude directly instead.',
+      );
+      return;
+    }
+    mapRef.current = map;
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
+    const el = document.createElement('div');
+    el.className = 'astroview-marker';
+    el.innerHTML =
+      '<span class="block h-3 w-3 rounded-full border-2 border-[#4da3ff] bg-[#7cc4ff]/40 shadow-[0_0_10px_rgba(77,163,255,0.9)]"></span>';
+    markerRef.current = new maplibregl.Marker({ element: el })
+      .setLngLat([location.longitude, location.latitude])
+      .addTo(map);
+
+    map.on('click', (e) => {
+      setLocation({
+        latitude: clamp(e.lngLat.lat, -89.5, 89.5),
+        longitude: ((((e.lngLat.lng + 180) % 360) + 360) % 360) - 180,
+        elevation: 0,
+      });
+    });
+    map.on('error', (e) => {
+      // Tile failures are common on flaky networks; do not nuke the whole panel.
+      if (e?.error && 'status' in e.error) return;
+    });
+
+    return () => {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      map.remove();
+      mapRef.current = null;
+    };
+    // The map is created once; location changes are pushed through effects below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    markerRef.current?.setLngLat([location.longitude, location.latitude]);
+  }, [location.latitude, location.longitude]);
+
+  /* -------------------------------------------- light pollution overlay */
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const has = map.getSource('lightpollution');
+      if (showLp && lpKey && !has) {
+        map.addSource('lightpollution', {
+          type: 'raster',
+          tiles: [
+            `https://tiles.lightpollutionmap.info/tiles/viirs_2023/{z}/{x}/{y}.png?apikey=${encodeURIComponent(
+              lpKey,
+            )}`,
+          ],
+          tileSize: 256,
+          maxzoom: 8,
+          attribution:
+            'Light pollution: VIIRS/DNB via <a href="https://www.lightpollutionmap.info/">lightpollutionmap.info</a>',
+        });
+        map.addLayer({
+          id: 'lightpollution',
+          type: 'raster',
+          source: 'lightpollution',
+          paint: { 'raster-opacity': 0.55 },
+        });
+      } else if ((!showLp || !lpKey) && has) {
+        if (map.getLayer('lightpollution')) map.removeLayer('lightpollution');
+        map.removeSource('lightpollution');
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once('load', apply);
+  }, [showLp, lpKey]);
+
+  const saveKey = useCallback((value: string) => {
+    setLpKey(value);
+    try {
+      if (value) localStorage.setItem(LP_KEY_STORAGE, value);
+      else localStorage.removeItem(LP_KEY_STORAGE);
+    } catch {
+      /* private mode: the key just will not persist */
+    }
+  }, []);
+
+  /* ------------------------------------------------------------- search */
+
+  const runSearch = useCallback(async () => {
+    setSearchError(null);
+    setSearching(true);
+    try {
+      const r = await searchPlaces(query);
+      setResults(r);
+      if (r.length === 0) setSearchError('No matching place found.');
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Place search is unavailable.');
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, [query]);
+
+  const choose = useCallback(
+    (r: GeocodeResult) => {
+      setLocation({ latitude: r.latitude, longitude: r.longitude, elevation: 0 }, r.name);
+      mapRef.current?.flyTo({ center: [r.longitude, r.latitude], zoom: 8, duration: 900 });
+      setResults([]);
+      setQuery('');
+    },
+    [setLocation],
+  );
+
+  const useMyLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setSearchError('This browser does not expose a geolocation API.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          elevation: pos.coords.altitude ?? 0,
+        });
+        mapRef.current?.flyTo({
+          center: [pos.coords.longitude, pos.coords.latitude],
+          zoom: 9,
+          duration: 900,
+        });
+      },
+      () => setSearchError('Location permission was denied.'),
+      { enableHighAccuracy: false, timeout: 10000 },
+    );
+  }, [setLocation]);
+
+  return (
+    <div className="flex min-h-0 flex-col">
+      <div className="border-b border-edge p-3">
+        <div className="flex gap-1.5">
+          <div className="relative flex-1">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-dim" />
+            <input
+              type="text"
+              value={query}
+              placeholder="Search for a place"
+              aria-label="Search for a place"
+              className="w-full !pl-7"
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void runSearch();
+              }}
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-dim hover:text-ink"
+                onClick={() => {
+                  setQuery('');
+                  setResults([]);
+                  setSearchError(null);
+                }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          <Button onClick={() => void runSearch()} disabled={searching} title="Search">
+            {searching ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+          </Button>
+          <Button onClick={useMyLocation} title="Use my current location">
+            <LocateFixed size={12} />
+          </Button>
+        </div>
+
+        {searchError && <p className="mt-2 text-2xs text-warn">{searchError}</p>}
+
+        {results.length > 0 && (
+          <ul className="mt-2 max-h-40 overflow-y-auto rounded border border-edge bg-panel2">
+            {results.map((r) => (
+              <li key={`${r.latitude},${r.longitude},${r.name}`}>
+                <button
+                  type="button"
+                  onClick={() => choose(r)}
+                  className="block w-full px-2 py-1.5 text-left text-2xs leading-snug text-muted transition-colors hover:bg-panel hover:text-ink"
+                >
+                  {r.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="relative min-h-[220px] flex-1">
+        <div ref={containerRef} className="absolute inset-0" />
+        {mapError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-panel/90 p-4">
+            <p className="text-2xs leading-relaxed text-warn">{mapError}</p>
+          </div>
+        )}
+        <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded border border-edge bg-panel/85 px-2 py-1 text-2xs text-muted backdrop-blur">
+          <Crosshair size={10} className="text-accent" />
+          click the map to place the observer
+        </div>
+      </div>
+
+      <div className="border-t border-edge p-3">
+        <div className="numeric mb-2 text-xs text-ink">
+          {formatCoordinate(location.latitude, location.longitude)}
+        </div>
+        <div className="mb-3 truncate text-2xs text-dim" title={state.locationName}>
+          {state.locationName} &middot; {state.timeZone}
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <Field label="Latitude" className="mb-0">
+            <input
+              type="number"
+              step="0.0001"
+              min={-89.5}
+              max={89.5}
+              value={location.latitude.toFixed(4)}
+              className="w-full"
+              onChange={(e) =>
+                setLocation({ ...location, latitude: clamp(Number(e.target.value), -89.5, 89.5) })
+              }
+            />
+          </Field>
+          <Field label="Longitude" className="mb-0">
+            <input
+              type="number"
+              step="0.0001"
+              min={-180}
+              max={180}
+              value={location.longitude.toFixed(4)}
+              className="w-full"
+              onChange={(e) =>
+                setLocation({ ...location, longitude: clamp(Number(e.target.value), -180, 180) })
+              }
+            />
+          </Field>
+          <Field label="Elev (m)" className="mb-0">
+            <input
+              type="number"
+              step="10"
+              value={Math.round(location.elevation)}
+              className="w-full"
+              onChange={(e) =>
+                setLocation({ ...location, elevation: clamp(Number(e.target.value), -400, 9000) })
+              }
+            />
+          </Field>
+        </div>
+
+        <div className="mt-3 hairline pt-2">
+          <Toggle
+            checked={showLp}
+            onChange={setShowLp}
+            label="Light pollution overlay"
+            hint="Needs your own lightpollutionmap.info API key"
+          />
+          {showLp && (
+            <div className="mt-2 space-y-2">
+              <input
+                type="password"
+                value={lpKey}
+                placeholder="lightpollutionmap.info API key"
+                aria-label="Light pollution API key"
+                className="w-full"
+                onChange={(e) => saveKey(e.target.value)}
+              />
+              <Note>
+                The key is stored only in this browser and is never sent anywhere except to
+                lightpollutionmap.info when it requests tiles. AstroView ships no key of its own:
+                a static site cannot keep one secret. Without a key, use the SQM control instead.
+              </Note>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

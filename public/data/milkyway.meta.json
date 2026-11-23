@@ -1,0 +1,61 @@
+{
+  "file": "milkyway.webp",
+  "width": 4096,
+  "height": 2048,
+  "projection": "equirectangular (plate carree)",
+  "frame": "equatorial J2000 (ICRS), geocentric",
+  "mapping": "u = ((180 - raDeg) / 360) mod 1 ; v = (90 - decDeg) / 180",
+  "mappingNote": "North up, RA increasing to the left, RA 0h at the horizontal centre. Measured, not assumed - see registration below.",
+  "source": "NASA/Goddard Space Flight Center Scientific Visualization Studio - Deep Star Maps (SVS 3895), starmap_8k.jpg",
+  "sourceUrl": "https://svs.gsfc.nasa.gov/3895/",
+  "rights": "NASA SVS imagery is not copyrighted. Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio.",
+  "content": "Plotted from the Bright Star, Tycho-2 and UCAC3 catalogs (~100 million stars). The Milky Way band is real integrated starlight, not an artistic rendering.",
+  "limitations": "Stars within about 20 degrees of the celestial poles are smeared horizontally by the projection, an artefact of the source map.",
+  "registration": {
+    "method": "High-pass filtered image, matched filter against HYG stars brighter than magnitude 4 over all axis flips and pixel offsets.",
+    "starsUsed": 520,
+    "peakOverChance": 57.5,
+    "best": {
+      "uFlip": true,
+      "vFlip": false,
+      "shiftXDeg": 180,
+      "shiftYDeg": 0,
+      "score": 46.781
+    },
+    "runnerUps": [
+      {
+        "uFlip": true,
+        "vFlip": false,
+        "shiftXDeg": 179.75,
+        "shiftYDeg": 0,
+        "score": 16.779
+      },
+      {
+        "uFlip": true,
+        "vFlip": false,
+        "shiftXDeg": 180.25,
+        "shiftYDeg": 0,
+        "score": 15.323
+      },
+      {
+        "uFlip": true,
+        "vFlip": false,
+        "shiftXDeg": 180,
+        "shiftYDeg": 0.25,
+        "score": 12.662
+      },
+      {
+        "uFlip": true,
+        "vFlip": false,
+        "shiftXDeg": 180,
+        "shiftYDeg": -0.25,
+        "score": 11.488
+      }
+    ]
+  },
+  "diffuseStructureCheck": {
+    "planeOverHighLatitude": 3.254,
+    "innerGalaxyOverAnticentre": 1.341
+  },
+  "generatedBy": "scripts/build-milkyway-texture.mjs"
+}

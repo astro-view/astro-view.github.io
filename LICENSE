@@ -1,0 +1,44 @@
+MIT License
+
+Copyright (c) 2026 AstroView contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------
+THIRD-PARTY DATA AND ASSETS
+
+The MIT licence above covers this project's own source code only. The bundled
+datasets in public/data carry their own terms, which are NOT superseded by it:
+
+  public/data/stars.bin, stars.meta.json, star-names.json
+      Derived from the HYG Database (astronexus/HYG-Database), compiled by
+      David Nash from Hipparcos, the Yale Bright Star Catalogue and Gliese.
+      Licensed CC BY-SA 4.0. Redistribution of these derived files is
+      therefore also under CC BY-SA 4.0.
+      https://github.com/astronexus/HYG-Database
+
+  public/data/milkyway.webp, milkyway.meta.json
+      Derived from "Deep Star Maps" (starmap_8k.jpg) by the NASA/Goddard Space
+      Flight Center Scientific Visualization Studio, SVS ID 3895. NASA SVS
+      imagery is not copyrighted; credit NASA/GSFC SVS.
+      https://svs.gsfc.nasa.gov/3895/
+
+Runtime services used by the application, under their own terms:
+  OpenStreetMap tiles and the Nominatim search service,
+  (c) OpenStreetMap contributors, ODbL.

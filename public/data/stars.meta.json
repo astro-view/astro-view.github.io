@@ -1,0 +1,13 @@
+{
+  "source": "HYG Database v4.1 (hygdata_v41.csv)",
+  "sourceUrl": "https://github.com/astronexus/HYG-Database",
+  "license": "CC BY-SA 4.0",
+  "attribution": "HYG Database, David Nash (astronexus), CC BY-SA 4.0. Compiled from Hipparcos, Yale Bright Star Catalog and Gliese.",
+  "epoch": "J2000 (ICRS)",
+  "magnitudeLimit": 6.5,
+  "count": 8920,
+  "brightestMag": -1.44,
+  "faintestMag": 6.5,
+  "format": "Float32Array, little-endian, stride 4: [raDeg, decDeg, vmag, colorIndexBV]",
+  "generatedBy": "scripts/build-star-catalog.mjs"
+}

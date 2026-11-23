@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-void text-ink font-sans antialiased;
+    margin: 0;
+    overscroll-behavior: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-edge2 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-dim;
+  }
+
+  input[type='range'] {
+    @apply appearance-none bg-transparent;
+    height: 20px;
+  }
+  input[type='range']::-webkit-slider-runnable-track {
+    height: 3px;
+    @apply rounded-full bg-edge2;
+  }
+  input[type='range']::-webkit-slider-thumb {
+    @apply appearance-none bg-accent rounded-full;
+    height: 13px;
+    width: 13px;
+    margin-top: -5px;
+    border: 2px solid #0c111c;
+    box-shadow: 0 0 0 1px rgba(77, 163, 255, 0.5);
+    transition: transform 120ms ease;
+  }
+  input[type='range']::-webkit-slider-thumb:hover {
+    transform: scale(1.18);
+  }
+  input[type='range']::-moz-range-track {
+    height: 3px;
+    @apply rounded-full bg-edge2;
+  }
+  input[type='range']::-moz-range-thumb {
+    @apply bg-accent rounded-full border-0;
+    height: 13px;
+    width: 13px;
+    box-shadow: 0 0 0 1px rgba(77, 163, 255, 0.5);
+  }
+
+  input[type='date'],
+  input[type='time'],
+  input[type='number'],
+  input[type='text'],
+  select {
+    @apply bg-panel2 border border-edge rounded text-ink text-xs px-2 py-1.5 outline-none;
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+  input:focus,
+  select:focus {
+    @apply border-accent;
+    box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.18);
+  }
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='time']::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .panel-title {
+    @apply text-2xs font-semibold uppercase tracking-[0.14em] text-dim;
+  }
+  .hairline {
+    @apply border-t border-edge;
+  }
+  .numeric {
+    @apply font-mono tabular-nums;
+  }
+}
+
+/* MapLibre: fold the default chrome into the dark instrument look. */
+.maplibregl-ctrl-attrib {
+  background: rgba(8, 11, 20, 0.82) !important;
+  color: #8b9ab4 !important;
+  font-size: 10px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: #4da3ff !important;
+}
+.maplibregl-ctrl-group {
+  background: rgba(12, 17, 28, 0.92) !important;
+  border: 1px solid #1b2436 !important;
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid #1b2436 !important;
+}
+.maplibregl-ctrl-group button span {
+  filter: invert(0.85);
+}
+.maplibregl-canvas:focus {
+  outline: none;
+}
