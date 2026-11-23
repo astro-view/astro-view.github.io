@@ -17,7 +17,10 @@ Everything runs in the browser. There is no backend, no database, no account and
 
 ## Features
 
-**Sky preview (the main view)**
+**The sky is the interface.** It fills the window edge to edge; every control floats over it as
+a panel that folds away, and `H` clears all of them at once.
+
+**Sky view**
 - ~8,900 real stars from the HYG Database to magnitude 6.5, with colour from B−V index
 - All-sky Milky Way texture registered to J2000 equatorial coordinates (see
   [Milky Way registration](#milky-way-registration) — the registration was *measured*, not assumed)
@@ -41,7 +44,9 @@ Everything runs in the browser. There is no backend, no database, no account and
   or custom sensor dimensions
 - Focal length 1–200 mm on a logarithmic slider, plus an exact numeric field, with
   14/20/24/35/50/85 mm presets
-- Landscape and portrait, azimuth 0–360°, elevation −10–90°, full roll
+- Landscape and portrait, full roll
+- Aim by dragging the sky or with the arrow keys — azimuth and elevation have no sliders,
+  because the sky itself is the better control
 - Default preset: Sony A7C, full frame, 35 mm
 
 **Night planning**

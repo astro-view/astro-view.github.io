@@ -1,8 +1,7 @@
-/** Right-hand column: observation time, camera, orientation, sky conditions. */
+/** The controls dock: observation time, camera, sky conditions, astronomy, overlays. */
 import {
   Aperture,
   CalendarClock,
-  Compass,
   Eye,
   Info,
   Layers,
@@ -220,40 +219,18 @@ export function ControlPanel({ state }: { state: AstroViewState }) {
           </div>
         </Field>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="mb-3 grid grid-cols-3 gap-2">
           <Stat label="H FOV" value={fov.horizontal.toFixed(1)} unit="&deg;" />
           <Stat label="V FOV" value={fov.vertical.toFixed(1)} unit="&deg;" />
           <Stat label="Diag" value={fov.diagonal.toFixed(1)} unit="&deg;" />
         </div>
-        <p className="mt-2 text-2xs leading-relaxed text-dim">
-          {sensor.width} &times; {sensor.height} mm &middot; crop {sensor.cropFactor.toFixed(2)}
-          &times; &middot; FOV = 2&middot;atan(d / 2f)
-        </p>
-      </CollapsibleSection>
 
-      {/* -------------------------------------------------------- orientation */}
-      <CollapsibleSection title="Camera orientation" icon={<Compass size={12} />}>
-        <Field label="Azimuth" value={deg(camera.azimuth)} hint="0&deg; north, 90&deg; east">
-          <Slider
-            min={0}
-            max={360}
-            step={0.5}
-            value={camera.azimuth}
-            ariaLabel="Camera azimuth"
-            onChange={(v) => state.updateCamera({ azimuth: v })}
-          />
-        </Field>
-        <Field label="Elevation" value={deg(camera.elevation)}>
-          <Slider
-            min={-10}
-            max={90}
-            step={0.5}
-            value={camera.elevation}
-            ariaLabel="Camera elevation"
-            onChange={(v) => state.updateCamera({ elevation: v })}
-          />
-        </Field>
-        <Field label="Roll" value={deg(camera.roll)}>
+        {/*
+          Azimuth and elevation have no sliders: you aim by dragging the sky,
+          which is both faster and the thing you are actually looking at. Roll
+          stays, because dragging cannot express it.
+        */}
+        <Field label="Roll" value={deg(camera.roll)} hint="Aim by dragging the sky itself">
           <Slider
             min={-180}
             max={180}
@@ -263,6 +240,7 @@ export function ControlPanel({ state }: { state: AstroViewState }) {
             onChange={(v) => state.updateCamera({ roll: v })}
           />
         </Field>
+
         <div className="flex flex-wrap gap-1.5">
           <Button
             size="sm"
@@ -277,13 +255,22 @@ export function ControlPanel({ state }: { state: AstroViewState }) {
             <Telescope size={11} className="mr-1 inline" />
             Aim at core
           </Button>
-          <Button size="sm" onClick={() => state.updateCamera({ roll: 0 })}>
+          <Button size="sm" onClick={() => state.updateCamera({ roll: 0 })} title="Level the horizon">
             Level
           </Button>
-          <Button size="sm" onClick={() => state.updateCamera({ azimuth: 180, elevation: 30 })}>
-            Reset
+          <Button
+            size="sm"
+            onClick={() => state.updateCamera({ azimuth: 180, elevation: 30, roll: 0 })}
+            title="Face south, 30 degrees up"
+          >
+            Reset aim
           </Button>
         </div>
+
+        <p className="mt-2 text-2xs leading-relaxed text-dim">
+          {sensor.width} &times; {sensor.height} mm &middot; crop {sensor.cropFactor.toFixed(2)}
+          &times; &middot; FOV = 2&middot;atan(d / 2f)
+        </p>
       </CollapsibleSection>
 
       {/* ---------------------------------------------------------- astronomy */}

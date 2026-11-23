@@ -1,11 +1,16 @@
 /**
- * The sky preview.
+ * The sky view.
  *
- * The WebGL canvas renders a WIDER field than the lens captures, and the camera
- * frame is drawn over it as a rectangle, so you can see what is just outside
- * the frame while composing. Both views share one optical axis and one
- * rectilinear projection (see src/camera/overview.ts), so the rectangle marks
- * exactly what the lens would record.
+ * This fills the whole window and is the background everything else floats
+ * over, so it owns only the sky itself: the WebGL canvas, the camera frame
+ * rectangle, the labels, and the warnings that belong to the rendering. All
+ * other chrome lives in the overlay layer in App.tsx.
+ *
+ * The canvas renders a WIDER field than the lens captures, and the camera frame
+ * is drawn over it as a rectangle, so you can see what is just outside the
+ * frame while composing. Both views share one optical axis and one rectilinear
+ * projection (see src/camera/overview.ts), so the rectangle marks exactly what
+ * the lens would record.
  *
  * The DOM overlay uses the SAME projection module as the renderer's camera, so
  * a label and the star it names cannot drift apart.
@@ -13,7 +18,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { clsx } from 'clsx';
-import { Crosshair, Expand, Loader2, Minimize2, Move, TriangleAlert } from 'lucide-react';
+import { Crosshair, Loader2, TriangleAlert } from 'lucide-react';
 import { SkyRenderer } from '../rendering/SkyRenderer';
 import {
   type NamedStar,
@@ -21,7 +26,7 @@ import {
   loadStarNames,
   milkyWayTextureUrl,
 } from '../data/catalog';
-import { type FieldOfView, projectToFrame } from '../camera/projection';
+import { projectToFrame } from '../camera/projection';
 import { computeOverview } from '../camera/overview';
 import { RECTILINEAR_PRACTICAL_FOV_DEG } from '../camera/sensors';
 import {
@@ -32,7 +37,6 @@ import {
 } from '../astronomy/coordinates';
 import { CARDINALS, DEG2RAD, GALACTIC_CENTRE } from '../astronomy/constants';
 import type { AstroViewState } from '../hooks/useAstroView';
-import { Button } from './ui/primitives';
 
 interface OverlayMarker {
   key: string;
@@ -56,7 +60,6 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [names, setNames] = useState<NamedStar[]>([]);
-  const [fullscreen, setFullscreen] = useState(false);
   const [dragging, setDragging] = useState(false);
 
   const { camera, fov, basis, celestialMatrix, skyState, renderParameters, overlays } = state;
@@ -88,7 +91,7 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
       const detail = err instanceof Error ? err.message : String(err);
       setErrorMessage(
         /webgl|context/i.test(detail)
-          ? `WebGL could not be initialised in this browser. The sky preview needs WebGL; everything else on this page still works. (${detail})`
+          ? `WebGL could not be initialised in this browser. The sky view needs WebGL; everything else on this page still works. (${detail})`
           : `The sky renderer failed to start: ${detail}`,
       );
       return;
@@ -156,10 +159,6 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [measure]);
-
-  useEffect(() => {
-    measure();
-  }, [fullscreen, measure]);
 
   /* ---------------------------------------------------- push state to GL */
 
@@ -399,20 +398,15 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
   const extremeWideAngle = fov.horizontal > RECTILINEAR_PRACTICAL_FOV_DEG;
 
   return (
-    <div
-      className={clsx(
-        'relative min-h-0 overflow-hidden rounded-lg border border-edge bg-void',
-        fullscreen && 'fixed inset-0 z-50 rounded-none border-0',
-      )}
-    >
+    <div className="absolute inset-0 overflow-hidden bg-void">
       <div
         ref={containerRef}
         tabIndex={0}
         role="application"
-        aria-label="Sky preview. Drag or use the arrow keys to aim the camera."
+        aria-label="Sky view. Drag or use the arrow keys to aim the camera."
         onKeyDown={onKeyDown}
         className={clsx(
-          'absolute inset-0 touch-none outline-none focus-visible:ring-1 focus-visible:ring-accent/50',
+          'absolute inset-0 touch-none outline-none',
           dragging ? 'cursor-grabbing' : 'cursor-grab',
         )}
       >
@@ -421,16 +415,13 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
 
       {/* Camera frame: everything outside it is dimmed, so the frame reads as
           the capture area while the surrounding sky stays visible. It is hidden
-          when the lens is wider than the preview itself, because a rectangle
-          clipped to the canvas edge would wrongly say "all of this is in frame". */}
+          when the lens is wider than the view itself, because a rectangle
+          clipped to the window edge would wrongly say "all of this is in frame". */}
       {overlays.frameGuides && status !== 'error' && !overview.frameExceedsView && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
           <div
             className="absolute border border-accent/70"
-            style={{
-              ...frameStyle,
-              boxShadow: '0 0 0 9999px rgba(5, 7, 13, 0.55)',
-            }}
+            style={{ ...frameStyle, boxShadow: '0 0 0 9999px rgba(5, 7, 13, 0.5)' }}
           >
             <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
               {Array.from({ length: 9 }).map((_, i) => (
@@ -441,12 +432,14 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
               size={16}
               className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-accent/60"
             />
-            <span className="absolute -left-px -top-px h-3 w-3 border-l-2 border-t-2 border-accent" />
-            <span className="absolute -right-px -top-px h-3 w-3 border-r-2 border-t-2 border-accent" />
-            <span className="absolute -bottom-px -left-px h-3 w-3 border-b-2 border-l-2 border-accent" />
-            <span className="absolute -bottom-px -right-px h-3 w-3 border-b-2 border-r-2 border-accent" />
+            <span className="absolute -left-px -top-px h-3.5 w-3.5 border-l-2 border-t-2 border-accent" />
+            <span className="absolute -right-px -top-px h-3.5 w-3.5 border-r-2 border-t-2 border-accent" />
+            <span className="absolute -bottom-px -left-px h-3.5 w-3.5 border-b-2 border-l-2 border-accent" />
+            <span className="absolute -bottom-px -right-px h-3.5 w-3.5 border-b-2 border-r-2 border-accent" />
             <span className="numeric absolute -top-5 left-0 text-2xs text-accent2">
-              {camera.focalLength < 10 ? camera.focalLength.toFixed(1) : camera.focalLength.toFixed(0)}
+              {camera.focalLength < 10
+                ? camera.focalLength.toFixed(1)
+                : camera.focalLength.toFixed(0)}
               mm &middot; {fov.horizontal.toFixed(1)}&deg; &times; {fov.vertical.toFixed(1)}&deg;
             </span>
           </div>
@@ -498,51 +491,18 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
         ))}
       </div>
 
-      {/* Readout */}
-      <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1">
-        <div className="numeric rounded border border-edge bg-panel/85 px-2 py-1 text-2xs text-muted backdrop-blur">
-          <span className="text-ink">
-            {camera.focalLength < 10 ? camera.focalLength.toFixed(1) : camera.focalLength.toFixed(0)}
-            mm
-          </span>
-          <span className="mx-1.5 text-edge2">|</span>
-          {fov.horizontal.toFixed(1)}&deg; &times; {fov.vertical.toFixed(1)}&deg;
-          <span className="mx-1.5 text-edge2">|</span>
-          {state.sensor.name}
-        </div>
-        <div className="numeric rounded border border-edge bg-panel/85 px-2 py-1 text-2xs text-muted backdrop-blur">
-          az <span className="text-ink">{camera.azimuth.toFixed(1)}&deg;</span>
-          <span className="mx-1.5 text-edge2">|</span>
-          alt <span className="text-ink">{camera.elevation.toFixed(1)}&deg;</span>
-          <span className="mx-1.5 text-edge2">|</span>
-          roll <span className="text-ink">{camera.roll.toFixed(1)}&deg;</span>
-        </div>
-        <div className="numeric rounded border border-edge/60 bg-panel/70 px-2 py-1 text-2xs text-dim backdrop-blur">
-          preview {overview.fov.horizontal.toFixed(0)}&deg; wide
-        </div>
-      </div>
-
-      <div className="absolute right-3 top-3 flex items-center gap-1.5">
-        <span className="numeric pointer-events-none rounded border border-edge bg-panel/85 px-2 py-1 text-2xs text-muted backdrop-blur">
-          SQM {state.brightness.effectiveSqm.toFixed(2)} &middot; Bortle{' '}
-          {state.brightness.bortle.bortle}
-        </span>
-        <Button size="sm" onClick={() => setFullscreen((f) => !f)} title="Toggle fullscreen">
-          {fullscreen ? <Minimize2 size={12} /> : <Expand size={12} />}
-        </Button>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 text-2xs text-dim">
-        <Move size={11} />
-        drag or arrow keys to aim &middot; scroll to zoom the lens
-      </div>
-
       {(extremeWideAngle || overview.frameExceedsView) && status === 'ready' && (
-        <div className="pointer-events-none absolute bottom-3 right-3 max-w-[18rem] rounded border border-warn/40 bg-panel/90 px-2 py-1.5 text-2xs leading-relaxed text-warn backdrop-blur">
+        <div
+          className={clsx(
+            'pointer-events-none absolute left-1/2 top-16 max-w-sm -translate-x-1/2 rounded-lg',
+            'border border-warn/40 bg-panel/90 px-3 py-2 text-2xs leading-relaxed text-warn backdrop-blur-md',
+          )}
+        >
           {overview.frameExceedsView && (
             <>
-              <strong>The frame is wider than this preview.</strong> The rectangle is hidden rather
-              than clipped to the edge, which would wrongly suggest everything visible is captured.{' '}
+              <strong>The frame is wider than this view.</strong> The rectangle is hidden rather
+              than clipped to the edge, which would wrongly suggest everything visible is
+              captured.{' '}
             </>
           )}
           {extremeWideAngle && (
@@ -569,21 +529,18 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
           <div className="max-w-md rounded-lg border border-bad/40 bg-panel p-4">
             <div className="mb-2 flex items-center gap-2 text-bad">
               <TriangleAlert size={14} />
-              <span className="text-xs font-semibold">Sky preview unavailable</span>
+              <span className="text-xs font-semibold">Sky view unavailable</span>
             </div>
             <p className="text-2xs leading-relaxed text-muted">{errorMessage}</p>
           </div>
         </div>
       )}
 
-      {status === 'ready' && errorMessage && !extremeWideAngle && (
-        <div className="absolute bottom-3 right-3 max-w-xs rounded border border-warn/40 bg-panel/90 px-2 py-1.5 text-2xs text-warn backdrop-blur">
+      {status === 'ready' && errorMessage && !extremeWideAngle && !overview.frameExceedsView && (
+        <div className="pointer-events-none absolute left-1/2 top-16 max-w-sm -translate-x-1/2 rounded-lg border border-warn/40 bg-panel/90 px-3 py-2 text-2xs text-warn backdrop-blur-md">
           {errorMessage}
         </div>
       )}
     </div>
   );
 }
-
-/** Re-exported so tests and the map panel can reason about the same geometry. */
-export type { FieldOfView };

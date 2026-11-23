@@ -302,7 +302,7 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
   }, [setLocation]);
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex min-h-0 flex-col overflow-y-auto">
       <div className="border-b border-edge p-3">
         <div className="flex gap-1.5">
           <div className="relative flex-1">
@@ -360,7 +360,7 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
         )}
       </div>
 
-      <div className="relative min-h-[220px] flex-1">
+      <div className="relative h-52 shrink-0">
         <div ref={containerRef} className="absolute inset-0" />
         {mapError && (
           <div className="absolute inset-0 flex items-center justify-center bg-panel/90 p-4">
