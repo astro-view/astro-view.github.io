@@ -234,6 +234,8 @@ export interface SkyRenderParameters {
   limitingMagnitude: number;
   /** Multiplier on the Milky Way texture's contrast, 0..1. */
   milkyWayContrast: number;
+  /** Overall gain applied to the Milky Way after its tone curve. */
+  milkyWayExposure: number;
   /** Overall gain applied to star brightness. */
   starGain: number;
 }
@@ -272,6 +274,10 @@ export function skyRenderParameters(
     glowColor,
     limitingMagnitude: clamp(limitingMagnitude(sqm) + 1.0, 2.0, 6.5),
     milkyWayContrast: contrast,
+    // A display gain, not a physical quantity. A dark sky is given slightly
+    // more of it, the way a photographer would push the exposure when there is
+    // nothing to blow out.
+    milkyWayExposure: clamp(1.05 + 0.45 * contrast, 1.05, 1.5),
     starGain: clamp(0.55 + 0.45 * contrast, 0.5, 1.0),
   };
 }

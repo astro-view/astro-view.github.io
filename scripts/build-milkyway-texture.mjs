@@ -291,7 +291,7 @@ async function main() {
   const outPath = path.join(OUT, 'milkyway.webp');
   await sharp(srcPath)
     .resize(OUT_WIDTH, OUT_HEIGHT, { fit: 'fill', kernel: 'lanczos3' })
-    .webp({ quality: 82, effort: 6 })
+    .webp({ quality: 93, effort: 6, smartSubsample: false })
     .toFile(outPath);
   const size = (await stat(outPath)).size;
 

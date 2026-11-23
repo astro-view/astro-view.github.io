@@ -28,14 +28,6 @@ import { galacticToEquatorial } from '../astronomy/coordinates';
 const SKY_RADIUS = 100;
 const STAR_RADIUS = 99;
 
-export interface FrameRect {
-  /** CSS pixels, relative to the canvas. */
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export interface SkyAppearance {
   /** 0..1 additive background from light pollution / twilight. */
   backgroundLevel: number;
@@ -44,6 +36,8 @@ export interface SkyAppearance {
   milkyWayContrast: number;
   limitingMagnitude: number;
   starGain: number;
+  /** Overall gain on the Milky Way, after its tone curve. */
+  milkyWayExposure: number;
   showEquatorialGrid: boolean;
   showHorizonGrid: boolean;
   showGalacticEquator: boolean;
@@ -128,17 +122,43 @@ const SKY_FRAGMENT = /* glsl */ `
   uniform float uBackground;
   uniform vec3 uGlow;
   uniform float uExposure;
+  uniform float uBlackLevel;
+  uniform float uToneGamma;
+  uniform float uSaturation;
   uniform float uShowMilkyWay;
   varying vec2 vUv;
 
+  // Cheap ordered-ish hash, used to dither away banding. The faint parts of the
+  // Milky Way live in the bottom few percent of the range, where 8-bit WebP
+  // steps are visible as contours once the tone curve lifts them.
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+  }
+
   void main() {
     vec3 tex = texture2D(uMap, vUv).rgb;
-    // The source map is integrated starlight. Treat it as surface brightness:
-    // light pollution reduces its CONTRAST against a raised background rather
-    // than dimming it, which is what washes the Milky Way out in practice.
-    vec3 milkyWay = tex * uExposure * uContrast * uShowMilkyWay;
+
+    // 1. Remove the map's background pedestal. Without this the whole sky sits
+    //    on a grey floor and the band has almost no contrast against it.
+    vec3 t = max(vec3(0.0), tex - uBlackLevel);
+
+    // 2. Lift the faint diffuse structure. The interesting surface brightness
+    //    spans a tiny linear range, so a power curve below 1 is what makes the
+    //    dust lanes and the outer band readable at all.
+    vec3 milkyWay = pow(t, vec3(uToneGamma)) * uExposure;
+
+    // 3. Saturation: integrated starlight is genuinely coloured, and the
+    //    tone curve desaturates it.
+    float lum = dot(milkyWay, vec3(0.2126, 0.7152, 0.0722));
+    milkyWay = mix(vec3(lum), milkyWay, uSaturation);
+
+    // 4. Light pollution reduces CONTRAST against a raised background rather
+    //    than dimming the Milky Way, which is what washes it out in practice.
+    milkyWay *= uContrast * uShowMilkyWay;
+
     vec3 glow = uGlow * uBackground;
-    gl_FragColor = vec4(milkyWay + glow, 1.0);
+    float dither = (hash(gl_FragCoord.xy) - 0.5) * 0.004;
+    gl_FragColor = vec4(milkyWay + glow + dither, 1.0);
   }
 `;
 
@@ -238,7 +258,8 @@ export class SkyRenderer {
   private groundMaterial: THREE.ShaderMaterial | null = null;
   private texture: THREE.Texture | null = null;
 
-  private frame: FrameRect = { x: 0, y: 0, width: 1, height: 1 };
+  private canvasWidth = 1;
+  private canvasHeight = 1;
   private pixelRatio = 1;
   private disposed = false;
 
@@ -263,7 +284,9 @@ export class SkyRenderer {
   /* ---------------------------------------------------------------- build */
 
   private buildGround(): void {
-    const geometry = new THREE.SphereGeometry(SKY_RADIUS - 1, 48, 24, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+    // Inside the star sphere (radius 99) so below-horizon stars are hidden by the
+    // ground rather than z-fighting with it.
+    const geometry = new THREE.SphereGeometry(96, 48, 24, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
     this.groundMaterial = new THREE.ShaderMaterial({
       vertexShader: GROUND_VERTEX,
       fragmentShader: GROUND_FRAGMENT,
@@ -437,7 +460,13 @@ export class SkyRenderer {
           uContrast: { value: 1 },
           uBackground: { value: 0.01 },
           uGlow: { value: new THREE.Color(0.32, 0.4, 0.62) },
-          uExposure: { value: 1.25 },
+          // Tuned against the NASA map's own statistics: its median background
+          // is about 8/255 in sRGB, which is ~0.0022 once three.js decodes the
+          // texture to linear. See scripts/build-milkyway-texture.mjs.
+          uBlackLevel: { value: 0.0026 },
+          uToneGamma: { value: 0.52 },
+          uExposure: { value: 1.3 },
+          uSaturation: { value: 1.35 },
           uShowMilkyWay: { value: 1 },
         },
       });
@@ -472,6 +501,7 @@ export class SkyRenderer {
         a.glowColor[2],
       );
       this.skyMaterial.uniforms.uShowMilkyWay.value = a.showMilkyWay ? 1 : 0;
+      this.skyMaterial.uniforms.uExposure.value = a.milkyWayExposure;
     }
     if (this.starMaterial) {
       this.starMaterial.uniforms.uLimitMag.value = a.limitingMagnitude;
@@ -491,7 +521,9 @@ export class SkyRenderer {
   }
 
   setOrientation(o: OrientationState): void {
-    this.camera.fov = clamp(o.fovVertical, 0.2, 160);
+    // This is the OVERVIEW field, which is wider than the lens: the preview
+    // shows what is just outside the frame. See src/camera/overview.ts.
+    this.camera.fov = clamp(o.fovVertical, 0.2, 165);
     this.camera.aspect = o.aspect;
 
     // Build the view matrix from the camera basis directly: three.js lookAt
@@ -533,14 +565,18 @@ export class SkyRenderer {
     if (this.starMaterial) {
       // Keep stars readable: slightly larger when zoomed in, never huge.
       const zoom = clamp(Math.pow(45 / Math.max(1, o.fovVertical), 0.28), 0.75, 2.4);
-      const density = clamp(this.frame.height / 760, 0.7, 2.2);
+      const density = clamp(this.canvasHeight / 760, 0.7, 2.2);
       this.starMaterial.uniforms.uSizeScale.value = zoom * density * this.pixelRatio;
     }
   }
 
-  /** Canvas size in CSS pixels plus the letterboxed frame rectangle inside it. */
-  setViewport(canvasWidth: number, canvasHeight: number, frame: FrameRect): void {
-    this.frame = frame;
+  /**
+   * Canvas size in CSS pixels. The sky fills the whole canvas; the camera frame
+   * is a rectangle drawn over it by the DOM overlay, not a render viewport.
+   */
+  setViewport(canvasWidth: number, canvasHeight: number): void {
+    this.canvasWidth = canvasWidth;
+    this.canvasHeight = canvasHeight;
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(canvasWidth, canvasHeight, false);
@@ -548,17 +584,10 @@ export class SkyRenderer {
 
   render(): void {
     if (this.disposed) return;
-    const { x, y, width, height } = this.frame;
-    const canvasHeight = this.renderer.domElement.clientHeight;
     this.renderer.setScissorTest(false);
+    this.renderer.setViewport(0, 0, this.canvasWidth, this.canvasHeight);
     this.renderer.clear(true, true, true);
-    // WebGL's origin is bottom-left; the frame rect is top-left based.
-    const glY = canvasHeight - y - height;
-    this.renderer.setViewport(x, glY, width, height);
-    this.renderer.setScissor(x, glY, width, height);
-    this.renderer.setScissorTest(true);
     this.renderer.render(this.scene, this.camera);
-    this.renderer.setScissorTest(false);
   }
 
   /** Direction of the Galactic Centre in EQJ, for overlay positioning. */

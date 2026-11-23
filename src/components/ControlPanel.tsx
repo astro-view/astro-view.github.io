@@ -171,26 +171,52 @@ export function ControlPanel({ state }: { state: AstroViewState }) {
           ))}
         </div>
 
-        <Field label="Focal length" value={`${camera.focalLength.toFixed(0)} mm`}>
+        <Field
+          label="Focal length"
+          value={`${camera.focalLength < 10 ? camera.focalLength.toFixed(1) : camera.focalLength.toFixed(0)} mm`}
+        >
+          {/*
+            Logarithmic, because the useful range spans 1-200 mm: a linear
+            slider would squeeze everything from 8 mm to 35 mm - where almost
+            all Milky Way work happens - into the first sixth of the track.
+          */}
           <Slider
-            min={FOCAL_MIN}
-            max={FOCAL_MAX}
+            min={0}
+            max={1000}
             step={1}
-            value={Math.round(camera.focalLength)}
+            value={Math.round(
+              (Math.log(camera.focalLength / FOCAL_MIN) / Math.log(FOCAL_MAX / FOCAL_MIN)) * 1000,
+            )}
             ariaLabel="Focal length in millimetres"
-            onChange={(v) => state.updateCamera({ focalLength: v })}
+            onChange={(v) => {
+              const f = FOCAL_MIN * Math.pow(FOCAL_MAX / FOCAL_MIN, v / 1000);
+              state.updateCamera({ focalLength: f < 10 ? Math.round(f * 10) / 10 : Math.round(f) });
+            }}
           />
           <div className="mt-1.5 flex flex-wrap gap-1">
             {FOCAL_PRESETS.map((f) => (
               <Button
                 key={f}
                 size="sm"
-                active={Math.round(camera.focalLength) === f}
+                active={Math.abs(camera.focalLength - f) < 0.5}
                 onClick={() => state.updateCamera({ focalLength: f })}
               >
                 {f}
               </Button>
             ))}
+            <input
+              type="number"
+              step="0.1"
+              min={FOCAL_MIN}
+              max={FOCAL_MAX}
+              value={camera.focalLength < 10 ? camera.focalLength.toFixed(1) : Math.round(camera.focalLength)}
+              aria-label="Focal length, exact value in millimetres"
+              className="w-16 !py-1"
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isFinite(v)) state.updateCamera({ focalLength: v });
+              }}
+            />
           </div>
         </Field>
 

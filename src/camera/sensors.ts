@@ -40,7 +40,21 @@ export const DEFAULT_SENSOR_ID = 'full-frame';
 /** Focal-length presets offered as one-tap buttons. */
 export const FOCAL_PRESETS: readonly number[] = [14, 20, 24, 35, 50, 85];
 
-export const FOCAL_MIN = 8;
+/**
+ * Above this field of view a rectilinear projection stretches the corners so
+ * hard that the preview stops being a useful guide to composition, and the
+ * geometry runs away entirely as the angle approaches 180 degrees. Real lenses
+ * this wide are fisheyes, which use a different projection, so the UI warns
+ * rather than pretending the rendering is what such a lens would record.
+ */
+export const RECTILINEAR_PRACTICAL_FOV_DEG = 120;
+
+/**
+ * 1 mm is far shorter than any rectilinear lens made (it is 173.6 degrees
+ * across a full frame), but it is allowed so the whole visible sky can be
+ * inspected at once. See RECTILINEAR_PRACTICAL_FOV_DEG.
+ */
+export const FOCAL_MIN = 1;
 export const FOCAL_MAX = 200;
 
 /**

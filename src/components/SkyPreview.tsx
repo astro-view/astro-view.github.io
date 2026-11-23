@@ -1,40 +1,49 @@
 /**
- * The camera's view of the sky: a WebGL canvas showing the frame, plus a DOM
- * overlay for labels and guides.
+ * The sky preview.
  *
- * The overlay uses the SAME projection module as the renderer's camera, so a
- * label and the star it names cannot drift apart: both come from
- * `projectToFrame` with the identical basis and field of view.
+ * The WebGL canvas renders a WIDER field than the lens captures, and the camera
+ * frame is drawn over it as a rectangle, so you can see what is just outside
+ * the frame while composing. Both views share one optical axis and one
+ * rectilinear projection (see src/camera/overview.ts), so the rectangle marks
+ * exactly what the lens would record.
+ *
+ * The DOM overlay uses the SAME projection module as the renderer's camera, so
+ * a label and the star it names cannot drift apart.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { clsx } from 'clsx';
-import { Crosshair, Expand, Loader2, Minimize2, MousePointer2, TriangleAlert } from 'lucide-react';
-import { SkyRenderer, type FrameRect } from '../rendering/SkyRenderer';
+import { Crosshair, Expand, Loader2, Minimize2, Move, TriangleAlert } from 'lucide-react';
+import { SkyRenderer } from '../rendering/SkyRenderer';
 import {
   type NamedStar,
   loadStarCatalog,
   loadStarNames,
   milkyWayTextureUrl,
 } from '../data/catalog';
-import { projectToFrame, dragToOrientationDelta } from '../camera/projection';
+import { type FieldOfView, projectToFrame } from '../camera/projection';
+import { computeOverview } from '../camera/overview';
+import { RECTILINEAR_PRACTICAL_FOV_DEG } from '../camera/sensors';
 import {
   type Vec3,
   equatorialToVector,
   multiplyMatrixVector,
   enuFromHorizontal,
 } from '../astronomy/coordinates';
-import { CARDINALS, GALACTIC_CENTRE } from '../astronomy/constants';
+import { CARDINALS, DEG2RAD, GALACTIC_CENTRE } from '../astronomy/constants';
 import type { AstroViewState } from '../hooks/useAstroView';
 import { Button } from './ui/primitives';
 
 interface OverlayMarker {
   key: string;
   label: string;
+  /** Pixel position inside the canvas. */
   x: number;
   y: number;
   kind: 'cardinal' | 'star' | 'gc' | 'moon' | 'sun';
   detail?: string;
+  /** True when the lens would actually capture this direction. */
+  inFrame: boolean;
 }
 
 const GC_VECTOR = equatorialToVector(GALACTIC_CENTRE.raDeg, GALACTIC_CENTRE.decDeg);
@@ -43,7 +52,7 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<SkyRenderer | null>(null);
-  const [frame, setFrame] = useState<FrameRect>({ x: 0, y: 0, width: 1, height: 1 });
+  const [size, setSize] = useState({ width: 1, height: 1 });
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [names, setNames] = useState<NamedStar[]>([]);
@@ -51,6 +60,12 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
   const [dragging, setDragging] = useState(false);
 
   const { camera, fov, basis, celestialMatrix, skyState, renderParameters, overlays } = state;
+
+  /** The wider field the canvas shows, and where the lens' frame sits inside it. */
+  const overview = useMemo(
+    () => computeOverview(fov, size.width, size.height),
+    [fov, size.width, size.height],
+  );
 
   /* ------------------------------------------------------- renderer setup */
 
@@ -122,36 +137,16 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
     };
   }, []);
 
-  /* ----------------------------------------------- layout and frame rect */
+  /* ------------------------------------------------------ size and layout */
 
   const measure = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const w = el.clientWidth;
-    const h = el.clientHeight;
-    const aspect = fov.aspect;
-    // Letterbox the camera frame inside the available area, with a small margin.
-    const availW = w - 24;
-    const availH = h - 24;
-    let fw = availW;
-    let fh = fw / aspect;
-    if (fh > availH) {
-      fh = availH;
-      fw = fh * aspect;
-    }
-    setFrame({
-      x: Math.round((w - fw) / 2),
-      y: Math.round((h - fh) / 2),
-      width: Math.max(1, Math.round(fw)),
-      height: Math.max(1, Math.round(fh)),
-    });
-    rendererRef.current?.setViewport(w, h, {
-      x: Math.round((w - fw) / 2),
-      y: Math.round((h - fh) / 2),
-      width: Math.max(1, Math.round(fw)),
-      height: Math.max(1, Math.round(fh)),
-    });
-  }, [fov.aspect]);
+    const width = Math.max(1, el.clientWidth);
+    const height = Math.max(1, el.clientHeight);
+    setSize((s) => (s.width === width && s.height === height ? s : { width, height }));
+    rendererRef.current?.setViewport(width, height);
+  }, []);
 
   useLayoutEffect(() => {
     measure();
@@ -171,11 +166,13 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
   useEffect(() => {
     const r = rendererRef.current;
     if (!r) return;
+    r.setViewport(size.width, size.height);
     r.setCelestialRotation(celestialMatrix);
     r.setAppearance({
       backgroundLevel: renderParameters.backgroundLevel,
       glowColor: renderParameters.glowColor,
       milkyWayContrast: renderParameters.milkyWayContrast,
+      milkyWayExposure: renderParameters.milkyWayExposure,
       limitingMagnitude: renderParameters.limitingMagnitude,
       starGain: renderParameters.starGain,
       showEquatorialGrid: overlays.equatorialGrid,
@@ -187,100 +184,172 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
       azimuth: camera.azimuth,
       elevation: camera.elevation,
       roll: camera.roll,
-      fovVertical: fov.vertical,
-      aspect: fov.aspect,
+      fovVertical: overview.fov.vertical,
+      aspect: overview.fov.aspect,
     });
     r.render();
-  }, [celestialMatrix, renderParameters, overlays, camera, fov, frame, status]);
+  }, [celestialMatrix, renderParameters, overlays, camera, overview, size, status]);
 
-  /* ------------------------------------------------------ drag to look around */
+  /* ------------------------------------------- drag to aim, wheel to zoom */
+
+  /**
+   * Pointer handlers read everything they need from this ref.
+   *
+   * They must NOT close over `state` or `fov`: those identities change on every
+   * render, so an effect depending on them would tear the listeners down and
+   * rebuild them after the first pointermove - which silently kills the drag
+   * halfway through.
+   */
+  const interaction = useRef({
+    width: 1,
+    height: 1,
+    overviewHorizontal: 60,
+    overviewVertical: 40,
+    elevation: 0,
+    focalLength: 35,
+    nudge: (_dAz: number, _dEl: number) => {},
+    setFocal: (_f: number) => {},
+  });
+
+  interaction.current.width = size.width;
+  interaction.current.height = size.height;
+  interaction.current.overviewHorizontal = overview.fov.horizontal;
+  interaction.current.overviewVertical = overview.fov.vertical;
+  interaction.current.elevation = camera.elevation;
+  interaction.current.focalLength = camera.focalLength;
+  interaction.current.nudge = state.nudgeOrientation;
+  interaction.current.setFocal = (f: number) => state.updateCamera({ focalLength: f });
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    let active = false;
+    let pointerId = -1;
     let lastX = 0;
     let lastY = 0;
-    let pointerId = -1;
 
     const down = (e: PointerEvent) => {
-      if (e.button !== 0) return;
-      active = true;
+      if (e.button !== 0 || pointerId !== -1) return;
       pointerId = e.pointerId;
       lastX = e.clientX;
       lastY = e.clientY;
       el.setPointerCapture(e.pointerId);
       setDragging(true);
     };
+
     const move = (e: PointerEvent) => {
-      if (!active || e.pointerId !== pointerId) return;
-      const dx = (e.clientX - lastX) / Math.max(1, frame.width);
-      const dy = (e.clientY - lastY) / Math.max(1, frame.height);
+      if (e.pointerId !== pointerId) return;
+      const i = interaction.current;
+      const dxFraction = (e.clientX - lastX) / Math.max(1, i.width);
+      const dyFraction = (e.clientY - lastY) / Math.max(1, i.height);
       lastX = e.clientX;
       lastY = e.clientY;
-      const delta = dragToOrientationDelta(dx, dy, fov, state.camera.elevation);
-      state.nudgeOrientation(delta.dAzimuth, delta.dElevation);
+
+      // Scale by the field actually on screen, so a drag moves the sky by the
+      // same fraction of the view at every focal length. Dividing azimuth by
+      // cos(elevation) keeps the motion under the cursor roughly one-to-one
+      // when the camera is pitched up, where lines of azimuth converge.
+      const cosEl = Math.max(0.12, Math.cos(i.elevation * DEG2RAD));
+      i.nudge((-dxFraction * i.overviewHorizontal) / cosEl, dyFraction * i.overviewVertical);
     };
+
     const up = (e: PointerEvent) => {
       if (e.pointerId !== pointerId) return;
-      active = false;
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
       pointerId = -1;
       setDragging(false);
     };
+
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
-      const factor = Math.exp(-e.deltaY * 0.0014);
-      state.updateCamera({ focalLength: state.camera.focalLength * factor });
+      const i = interaction.current;
+      i.setFocal(i.focalLength * Math.exp(-e.deltaY * 0.0014));
     };
 
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
+    el.addEventListener('lostpointercapture', up);
     el.addEventListener('wheel', wheel, { passive: false });
     return () => {
       el.removeEventListener('pointerdown', down);
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
       el.removeEventListener('pointercancel', up);
+      el.removeEventListener('lostpointercapture', up);
       el.removeEventListener('wheel', wheel);
     };
-  }, [frame.width, frame.height, fov, state]);
+    // Deliberately empty: everything mutable is read from `interaction`.
+  }, []);
+
+  /** Keyboard aiming, for people who would rather not drag. */
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const step = e.shiftKey ? 10 : 1;
+      switch (e.key) {
+        case 'ArrowLeft':
+          state.nudgeOrientation(-step, 0);
+          break;
+        case 'ArrowRight':
+          state.nudgeOrientation(step, 0);
+          break;
+        case 'ArrowUp':
+          state.nudgeOrientation(0, step);
+          break;
+        case 'ArrowDown':
+          state.nudgeOrientation(0, -step);
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+    },
+    [state],
+  );
 
   /* --------------------------------------------------------- DOM overlay */
 
   const markers = useMemo<OverlayMarker[]>(() => {
     if (!overlays.labels) return [];
     const out: OverlayMarker[] = [];
-    const push = (
+    const place = (
       key: string,
       label: string,
       direction: Vec3,
       kind: OverlayMarker['kind'],
       detail?: string,
     ) => {
-      const p = projectToFrame(direction, basis, fov);
-      if (!p.inFrame) return;
-      out.push({ key, label, x: (p.x + 1) / 2, y: (1 - p.y) / 2, kind, detail });
+      const wide = projectToFrame(direction, basis, overview.fov);
+      if (!wide.inFrame) return;
+      // Whether the LENS captures it, as opposed to merely being on screen.
+      const lens = projectToFrame(direction, basis, fov);
+      out.push({
+        key,
+        label,
+        x: ((wide.x + 1) / 2) * size.width,
+        y: ((1 - wide.y) / 2) * size.height,
+        kind,
+        detail,
+        inFrame: lens.inFrame,
+      });
     };
 
     for (const c of CARDINALS) {
-      if (!c.major && fov.horizontal > 60) continue;
-      push(`cardinal-${c.label}`, c.label, enuFromHorizontal(c.azimuth, 0), 'cardinal');
+      if (!c.major && overview.fov.horizontal > 90) continue;
+      place(`cardinal-${c.label}`, c.label, enuFromHorizontal(c.azimuth, 0), 'cardinal');
     }
 
-    const gcEnu = multiplyMatrixVector(celestialMatrix, GC_VECTOR);
-    push(
+    place(
       'gc',
       'Galactic Centre',
-      gcEnu,
+      multiplyMatrixVector(celestialMatrix, GC_VECTOR),
       'gc',
       `alt ${skyState.galacticCentre.altitude.toFixed(1)}°`,
     );
 
     if (skyState.moon.altitude > -2) {
-      push(
+      place(
         'moon',
         'Moon',
         enuFromHorizontal(skyState.moon.azimuth, skyState.moon.altitude),
@@ -289,30 +358,45 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
       );
     }
     if (skyState.sun.altitude > -8) {
-      push('sun', 'Sun', enuFromHorizontal(skyState.sun.azimuth, skyState.sun.altitude), 'sun');
+      place('sun', 'Sun', enuFromHorizontal(skyState.sun.azimuth, skyState.sun.altitude), 'sun');
     }
 
-    // Named stars, brightest first, capped so the frame never fills with text.
-    const magLimit = Math.min(renderParameters.limitingMagnitude, fov.horizontal > 50 ? 1.9 : 3.0);
+    const magLimit = Math.min(
+      renderParameters.limitingMagnitude,
+      overview.fov.horizontal > 70 ? 1.9 : 3.0,
+    );
     let shown = 0;
     for (const s of names) {
-      if (shown >= 14) break;
+      if (shown >= 16) break;
       if (s.mag > magLimit) continue;
       const enu = multiplyMatrixVector(celestialMatrix, equatorialToVector(s.raDeg, s.decDeg));
       if (enu[1] < -0.02) continue;
       const before = out.length;
-      push(`star-${s.name}`, s.name, enu, 'star', `m ${s.mag.toFixed(2)}`);
+      place(`star-${s.name}`, s.name, enu, 'star', `m ${s.mag.toFixed(2)}`);
       if (out.length > before) shown++;
     }
     return out;
-  }, [overlays.labels, basis, fov, celestialMatrix, skyState, names, renderParameters.limitingMagnitude]);
+  }, [
+    overlays.labels,
+    basis,
+    fov,
+    overview.fov,
+    size.width,
+    size.height,
+    celestialMatrix,
+    skyState,
+    names,
+    renderParameters.limitingMagnitude,
+  ]);
 
   const frameStyle = {
-    left: frame.x,
-    top: frame.y,
-    width: frame.width,
-    height: frame.height,
+    width: overview.frameWidth,
+    height: overview.frameHeight,
+    left: (size.width - overview.frameWidth) / 2,
+    top: (size.height - overview.frameHeight) / 2,
   } as const;
+
+  const extremeWideAngle = fov.horizontal > RECTILINEAR_PRACTICAL_FOV_DEG;
 
   return (
     <div
@@ -323,45 +407,65 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
     >
       <div
         ref={containerRef}
-        className={clsx('absolute inset-0 touch-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
+        tabIndex={0}
+        role="application"
+        aria-label="Sky preview. Drag or use the arrow keys to aim the camera."
+        onKeyDown={onKeyDown}
+        className={clsx(
+          'absolute inset-0 touch-none outline-none focus-visible:ring-1 focus-visible:ring-accent/50',
+          dragging ? 'cursor-grabbing' : 'cursor-grab',
+        )}
       >
         <div ref={canvasHostRef} className="h-full w-full" />
       </div>
 
-      {/* Frame border + guides */}
-      {overlays.frameGuides && status !== 'error' && (
-        <div
-          className="pointer-events-none absolute border border-accent/45"
-          style={frameStyle}
-          aria-hidden
-        >
-          <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
-            {Array.from({ length: 9 }).map((_, i) => (
-              <div key={i} className="border border-accent/[0.07]" />
-            ))}
+      {/* Camera frame: everything outside it is dimmed, so the frame reads as
+          the capture area while the surrounding sky stays visible. It is hidden
+          when the lens is wider than the preview itself, because a rectangle
+          clipped to the canvas edge would wrongly say "all of this is in frame". */}
+      {overlays.frameGuides && status !== 'error' && !overview.frameExceedsView && (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+          <div
+            className="absolute border border-accent/70"
+            style={{
+              ...frameStyle,
+              boxShadow: '0 0 0 9999px rgba(5, 7, 13, 0.55)',
+            }}
+          >
+            <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div key={i} className="border border-accent/[0.08]" />
+              ))}
+            </div>
+            <Crosshair
+              size={16}
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-accent/60"
+            />
+            <span className="absolute -left-px -top-px h-3 w-3 border-l-2 border-t-2 border-accent" />
+            <span className="absolute -right-px -top-px h-3 w-3 border-r-2 border-t-2 border-accent" />
+            <span className="absolute -bottom-px -left-px h-3 w-3 border-b-2 border-l-2 border-accent" />
+            <span className="absolute -bottom-px -right-px h-3 w-3 border-b-2 border-r-2 border-accent" />
+            <span className="numeric absolute -top-5 left-0 text-2xs text-accent2">
+              {camera.focalLength < 10 ? camera.focalLength.toFixed(1) : camera.focalLength.toFixed(0)}
+              mm &middot; {fov.horizontal.toFixed(1)}&deg; &times; {fov.vertical.toFixed(1)}&deg;
+            </span>
           </div>
-          <Crosshair
-            size={16}
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-accent/55"
-          />
-          {(['-left-px -top-px', '-right-px -top-px', '-left-px -bottom-px', '-right-px -bottom-px'] as const).map(
-            (pos) => (
-              <span key={pos} className={clsx('absolute h-3 w-3 border-accent', pos)} />
-            ),
-          )}
         </div>
       )}
 
-      {/* Labels */}
-      <div className="pointer-events-none absolute" style={frameStyle} aria-hidden>
+      {/* Labels, positioned in the wider view */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
         {markers.map((m) => (
           <div
             key={m.key}
-            className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap"
-            style={{ left: `${m.x * 100}%`, top: `${m.y * 100}%` }}
+            className={clsx(
+              'absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap transition-opacity',
+              m.inFrame ? 'opacity-100' : 'opacity-45',
+            )}
+            style={{ left: m.x, top: m.y }}
           >
             {m.kind === 'gc' ? (
-              <div className="flex -translate-y-0 flex-col items-center">
+              <div className="flex flex-col items-center">
                 <span className="relative block h-4 w-4 rounded-full border border-warn/90">
                   <span className="absolute inset-0 animate-pulseRing rounded-full border border-warn/60" />
                 </span>
@@ -388,18 +492,19 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
                 </span>
               </div>
             ) : (
-              <span className="rounded bg-void/55 px-1 text-2xs text-muted">
-                {m.label}
-              </span>
+              <span className="rounded bg-void/55 px-1 text-2xs text-muted">{m.label}</span>
             )}
           </div>
         ))}
       </div>
 
-      {/* Frame readout */}
+      {/* Readout */}
       <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1">
         <div className="numeric rounded border border-edge bg-panel/85 px-2 py-1 text-2xs text-muted backdrop-blur">
-          <span className="text-ink">{camera.focalLength.toFixed(0)}mm</span>
+          <span className="text-ink">
+            {camera.focalLength < 10 ? camera.focalLength.toFixed(1) : camera.focalLength.toFixed(0)}
+            mm
+          </span>
           <span className="mx-1.5 text-edge2">|</span>
           {fov.horizontal.toFixed(1)}&deg; &times; {fov.vertical.toFixed(1)}&deg;
           <span className="mx-1.5 text-edge2">|</span>
@@ -411,6 +516,9 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
           alt <span className="text-ink">{camera.elevation.toFixed(1)}&deg;</span>
           <span className="mx-1.5 text-edge2">|</span>
           roll <span className="text-ink">{camera.roll.toFixed(1)}&deg;</span>
+        </div>
+        <div className="numeric rounded border border-edge/60 bg-panel/70 px-2 py-1 text-2xs text-dim backdrop-blur">
+          preview {overview.fov.horizontal.toFixed(0)}&deg; wide
         </div>
       </div>
 
@@ -425,9 +533,27 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
       </div>
 
       <div className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 text-2xs text-dim">
-        <MousePointer2 size={11} />
-        drag to aim &middot; scroll to zoom the lens
+        <Move size={11} />
+        drag or arrow keys to aim &middot; scroll to zoom the lens
       </div>
+
+      {(extremeWideAngle || overview.frameExceedsView) && status === 'ready' && (
+        <div className="pointer-events-none absolute bottom-3 right-3 max-w-[18rem] rounded border border-warn/40 bg-panel/90 px-2 py-1.5 text-2xs leading-relaxed text-warn backdrop-blur">
+          {overview.frameExceedsView && (
+            <>
+              <strong>The frame is wider than this preview.</strong> The rectangle is hidden rather
+              than clipped to the edge, which would wrongly suggest everything visible is captured.{' '}
+            </>
+          )}
+          {extremeWideAngle && (
+            <>
+              {fov.horizontal.toFixed(0)}&deg; horizontal: a rectilinear projection stretches badly
+              past about {RECTILINEAR_PRACTICAL_FOV_DEG}&deg;, and real lenses this wide are
+              fisheyes, which project differently. The geometry is still exact on the optical axis.
+            </>
+          )}
+        </div>
+      )}
 
       {status === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center bg-void/70">
@@ -450,7 +576,7 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
         </div>
       )}
 
-      {status === 'ready' && errorMessage && (
+      {status === 'ready' && errorMessage && !extremeWideAngle && (
         <div className="absolute bottom-3 right-3 max-w-xs rounded border border-warn/40 bg-panel/90 px-2 py-1.5 text-2xs text-warn backdrop-blur">
           {errorMessage}
         </div>
@@ -458,3 +584,6 @@ export function SkyPreview({ state }: { state: AstroViewState }) {
     </div>
   );
 }
+
+/** Re-exported so tests and the map panel can reason about the same geometry. */
+export type { FieldOfView };

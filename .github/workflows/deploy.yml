@@ -45,8 +45,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      # `enablement: true` turns Pages on through the API instead of failing with
+      # "Get Pages site failed" when it has never been enabled by hand. It needs
+      # the `pages: write` permission declared above. It cannot help if the
+      # repository is private on a plan without Pages for private repos - make
+      # the repository public in that case.
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

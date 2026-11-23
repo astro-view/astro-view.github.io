@@ -63,10 +63,46 @@ const BASE_STYLE: StyleSpecification = {
   ],
 };
 
+/* --------------------------------------------------------------------------
+ * Camera direction indicator
+ * -------------------------------------------------------------------------- */
+
+const CONE_SIZE = 150;
+const CONE_CENTRE = CONE_SIZE / 2;
+const CONE_RADIUS = CONE_SIZE / 2 - 4;
+
+const VIEW_CONE_SVG = `<svg width="${CONE_SIZE}" height="${CONE_SIZE}" viewBox="0 0 ${CONE_SIZE} ${CONE_SIZE}" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g id="astroview-cone-rotate" style="transform-origin:${CONE_CENTRE}px ${CONE_CENTRE}px">
+    <path id="astroview-cone-wedge" fill="rgba(77,163,255,0.17)" stroke="rgba(124,196,255,0.55)" stroke-width="1"/>
+    <line id="astroview-cone-axis" x1="${CONE_CENTRE}" y1="${CONE_CENTRE}" x2="${CONE_CENTRE}" y2="${CONE_CENTRE - CONE_RADIUS}" stroke="rgba(124,196,255,0.9)" stroke-width="1.25" stroke-dasharray="4 3"/>
+  </g>
+</svg>`;
+
+/**
+ * SVG path for a wedge of half-angle `halfAngleDeg`, pointing straight up
+ * (screen north) from the observer. The whole group is then rotated by the
+ * azimuth, which works because map rotation is disabled, so screen up is north.
+ */
+function wedgePath(halfAngleDeg: number): string {
+  const half = clamp(halfAngleDeg, 0.4, 179);
+  if (half >= 179) {
+    return `M ${CONE_CENTRE - CONE_RADIUS},${CONE_CENTRE} a ${CONE_RADIUS},${CONE_RADIUS} 0 1,0 ${CONE_RADIUS * 2},0 a ${CONE_RADIUS},${CONE_RADIUS} 0 1,0 ${-CONE_RADIUS * 2},0 Z`;
+  }
+  const toXY = (deg: number) => {
+    const a = (deg - 90) * (Math.PI / 180); // -90 so 0 deg points up
+    return [CONE_CENTRE + CONE_RADIUS * Math.cos(a), CONE_CENTRE + CONE_RADIUS * Math.sin(a)];
+  };
+  const [x0, y0] = toXY(-half);
+  const [x1, y1] = toXY(half);
+  const largeArc = half > 90 ? 1 : 0;
+  return `M ${CONE_CENTRE},${CONE_CENTRE} L ${x0.toFixed(2)},${y0.toFixed(2)} A ${CONE_RADIUS},${CONE_RADIUS} 0 ${largeArc} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z`;
+}
+
 export function LocationPanel({ state }: { state: AstroViewState }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const viewConeRef = useRef<maplibregl.Marker | null>(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -109,6 +145,16 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
+    // Camera direction wedge, drawn under the observer dot. It is a fixed-size
+    // DOM marker rather than a geographic polygon so it stays legible at every
+    // zoom level, and because its meaning is angular, not metric.
+    const viewEl = document.createElement('div');
+    viewEl.style.pointerEvents = 'none';
+    viewEl.innerHTML = VIEW_CONE_SVG;
+    viewConeRef.current = new maplibregl.Marker({ element: viewEl, anchor: 'center' })
+      .setLngLat([location.longitude, location.latitude])
+      .addTo(map);
+
     const el = document.createElement('div');
     el.className = 'astroview-marker';
     el.innerHTML =
@@ -132,6 +178,8 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
     return () => {
       markerRef.current?.remove();
       markerRef.current = null;
+      viewConeRef.current?.remove();
+      viewConeRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -141,7 +189,22 @@ export function LocationPanel({ state }: { state: AstroViewState }) {
 
   useEffect(() => {
     markerRef.current?.setLngLat([location.longitude, location.latitude]);
+    viewConeRef.current?.setLngLat([location.longitude, location.latitude]);
   }, [location.latitude, location.longitude]);
+
+  // Keep the wedge pointing where the camera points, as wide as the lens sees.
+  useEffect(() => {
+    const el = viewConeRef.current?.getElement();
+    if (!el) return;
+    const group = el.querySelector('#astroview-cone-rotate') as SVGGElement | null;
+    const wedge = el.querySelector('#astroview-cone-wedge') as SVGPathElement | null;
+    if (!group || !wedge) return;
+    wedge.setAttribute('d', wedgePath(state.fov.horizontal / 2));
+    group.style.transform = `rotate(${state.camera.azimuth}deg)`;
+    // Fade the indicator when the camera is pointed steeply up: the ground
+    // footprint of the view stops meaning much near the zenith.
+    el.style.opacity = String(clamp(1 - state.camera.elevation / 110, 0.25, 1));
+  }, [state.camera.azimuth, state.camera.elevation, state.fov.horizontal]);
 
   /* -------------------------------------------- light pollution overlay */
 

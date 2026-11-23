@@ -22,7 +22,9 @@ Everything runs in the browser. There is no backend, no database, no account and
 - All-sky Milky Way texture registered to J2000 equatorial coordinates (see
   [Milky Way registration](#milky-way-registration) — the registration was *measured*, not assumed)
 - Rectilinear projection with the true field of view for the chosen sensor and focal length
-- Drag to aim, scroll to change focal length, fullscreen mode
+- **The preview is wider than the frame**: the sky renders past the camera frame so you can
+  compose against what is just outside it, with the frame drawn as a rectangle over it
+- Drag or use the arrow keys to aim, scroll to change focal length, fullscreen mode
 - Horizon, cardinal points, optional equatorial grid, alt/az grid and galactic equator
 - Galactic Centre, Moon and Sun markers; labels for named stars
 - Frame guides with thirds and the optical axis
@@ -30,13 +32,15 @@ Everything runs in the browser. There is no backend, no database, no account and
 **Location**
 - Click anywhere on a world map to place the observer
 - Place-name search, or type coordinates and elevation directly
+- Camera direction indicator on the map: a wedge showing the azimuth and the lens's angular width
 - Time zone resolved from the coordinates, with daylight saving handled correctly
 - Optional light-pollution tile overlay using *your own* API key (never bundled)
 
 **Camera**
 - Full frame, APS-C (Sony/Nikon/Fuji and Canon), Micro Four Thirds, 44×33 medium format, 1 inch,
   or custom sensor dimensions
-- Focal length 8–200 mm with 14/20/24/35/50/85 mm presets
+- Focal length 1–200 mm on a logarithmic slider, plus an exact numeric field, with
+  14/20/24/35/50/85 mm presets
 - Landscape and portrait, azimuth 0–360°, elevation −10–90°, full roll
 - Default preset: Sony A7C, full frame, 35 mm
 
@@ -72,7 +76,7 @@ Lucide icons · Vitest · GitHub Pages
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # type-check, then build to dist/
-npm run test     # 129 unit tests
+npm run test     # 141 unit tests
 ```
 
 Other scripts:
@@ -258,6 +262,11 @@ of the band is well placed. Both are reported, separately.
 
 ## Known limitations
 
+- **Ultra-wide focal lengths.** Below about 4 mm on full frame the lens is wider than the
+  preview can show rectilinearly, so the frame rectangle is hidden and a note says so, rather
+  than clipping the rectangle to the canvas edge and implying everything visible is captured.
+  Past 120 deg the projection stretches the corners hard; real lenses that wide are fisheyes,
+  which project differently. The geometry stays exact on the optical axis.
 - **Texture resolution.** The sky texture is 4096×2048, i.e. 0.088°/pixel. At 200 mm on full frame
   (10.3° horizontal) the Milky Way is only ~117 texture pixels wide and looks soft. Stars from the
   catalogue stay sharp at any focal length; the diffuse band does not. 8192×4096 was rejected

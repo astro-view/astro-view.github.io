@@ -34,6 +34,8 @@ import {
 } from '../astronomy/planner';
 import {
   DEFAULT_CAMERA_PRESET,
+  FOCAL_MAX,
+  FOCAL_MIN,
   type SensorFormat,
   SENSOR_FORMATS,
   sensorById,
@@ -182,7 +184,7 @@ export function useAstroView() {
         azimuth: wrapAzimuth(next.azimuth),
         elevation: clampElevation(next.elevation),
         roll: clampRoll(next.roll),
-        focalLength: clamp(next.focalLength, 8, 200),
+        focalLength: clamp(next.focalLength, FOCAL_MIN, FOCAL_MAX),
         customWidth: clamp(next.customWidth, 1, 120),
         customHeight: clamp(next.customHeight, 1, 120),
       };
